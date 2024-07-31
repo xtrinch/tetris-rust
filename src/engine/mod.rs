@@ -1,3 +1,5 @@
+use std::ops::{Index, IndexMut};
+
 use cgmath::Vector2;
 use piece::{Kind as PieceKind, Piece};
 use rand::prelude::SliceRandom;
@@ -11,7 +13,7 @@ type Offset = Vector2<isize>;
 
 // represents the game engine
 pub struct Engine {
-    board: Matrix,
+    matrix: Matrix,
     bag: Vec<PieceKind>, // this is from where tetris piece types are taken from during gameplay (7 are shuffled, taken out one by one, then process repeats)
     rng: ThreadRng,      // random number generator instance
     cursor: Option<Piece>, // current active piece (the one falling down), optional
@@ -20,7 +22,7 @@ pub struct Engine {
 impl Engine {
     pub fn new() -> Self {
         Engine {
-            board: Matrix::blank(),
+            matrix: Matrix::blank(),
             bag: Vec::new(),
             rng: thread_rng(),
             cursor: None,
@@ -39,16 +41,16 @@ impl Engine {
         self.bag.shuffle(&mut self.rng)
     }
 
-    // place the cursor into the board (on top)
+    // place the cursor into the matrix (on top)
     fn place_cursor(&mut self) {
         let cursor = self
             .cursor
             .take()
             .expect("Called place_cursor without a cursor");
 
-        // place all of the squares of the piece into the board
+        // place all of the squares of the piece into the matrix
         for coord in cursor.cells().expect("Cursor was out of bounds") {
-            let cell: &mut bool = self.board.get_mut(coord).unwrap();
+            let cell = &mut self.matrix[coord];
 
             // validate that the piece does not overlap with any other pieces
             debug_assert_eq!(*cell, false);
@@ -71,7 +73,7 @@ impl Matrix {
         Self([false; Self::SIZE])
     }
 
-    // check whether x&y is within board bounds
+    // check whether x&y is within matrix bounds
     fn in_bounds(Coordinate { x, y }: Coordinate) -> bool {
         x < Self::WIDTH && y < Self::HEIGHT
     }
@@ -80,9 +82,21 @@ impl Matrix {
     fn indexing(Coordinate { x, y }: Coordinate) -> usize {
         y * Self::WIDTH + x
     }
+}
 
-    // will return !reference! to cell (not copy of the value) if it is in bounds
-    fn get_mut(&mut self, coord: Coordinate) -> Option<&mut bool> {
-        Self::in_bounds(coord).then(|| &mut self.0[Self::indexing(coord)]) // self.0 -> first element of a tuple
+impl Index<Coordinate> for Matrix {
+    type Output = bool;
+
+    fn index(&self, coord: Coordinate) -> &Self::Output {
+        assert!(Self::in_bounds(coord));
+        &self.0[Self::indexing(coord)] // self.0 -> first element of a tuple
+    }
+}
+
+// will return !reference! to cell (not copy of the value) if it is in bounds
+impl IndexMut<Coordinate> for Matrix {
+    fn index_mut(&mut self, coord: Coordinate) -> &mut Self::Output {
+        assert!(Self::in_bounds(coord));
+        &mut self.0[Self::indexing(coord)] // self.0 -> first element of a tuple
     }
 }
