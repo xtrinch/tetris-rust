@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use cgmath::Vector2;
+use cgmath::{Point2, Vector2};
 use piece::{Kind as PieceKind, Piece};
 use rand::prelude::SliceRandom;
 use rand::rngs::ThreadRng;
@@ -8,8 +8,23 @@ use rand::thread_rng;
 
 mod piece;
 
-type Coordinate = Vector2<usize>;
+type Coordinate = Point2<usize>;
 type Offset = Vector2<isize>;
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum MoveKind {
+    Left,
+    Right,
+}
+
+impl MoveKind {
+    fn offset(&self) -> Offset {
+        match self {
+            MoveKind::Left => Offset::new(-1, 0),
+            MoveKind::Right => Offset::new(1, 0),
+        }
+    }
+}
 
 // represents the game engine
 pub struct Engine {
@@ -41,28 +56,97 @@ impl Engine {
         self.bag.shuffle(&mut self.rng)
     }
 
-    // place the cursor into the matrix (on top)
+    // place the cursor into the matrix onto the position it's currently at
     fn place_cursor(&mut self) {
         let cursor = self
             .cursor
             .take()
             .expect("Called place_cursor without a cursor");
 
+        // validate that the piece does not overlap with any other pieces
+        debug_assert!(
+            self.matrix.is_placeable(&cursor),
+            "Tried to place cursor in an unplaceable location: {:?}",
+            cursor
+        );
+
+        let color = cursor.kind.color();
         // place all of the squares of the piece into the matrix
-        for coord in cursor.cells().expect("Cursor was out of bounds") {
-            let cell = &mut self.matrix[coord];
-
-            // validate that the piece does not overlap with any other pieces
-            debug_assert_eq!(*cell, false);
-
-            // reassign cell
-            *cell = true;
+        for coord in cursor.cells().unwrap() {
+            self.matrix[coord] = Some(color);
         }
+    }
+
+    // returns Ok(()), Err(()) of unit, represented in memory same as a bool
+    fn move_cursor(&mut self, kind: MoveKind) -> Result<(), ()> {
+        let Some(cursor) = self.cursor.as_mut() else {
+            return Ok(()); // because it's OK to move a cursor that isn't there, it would just do nothing
+        };
+
+        let new = cursor.moved_by(kind.offset());
+
+        // check if it is not within moveable bounds (or above)
+        if self.matrix.is_clipping(&new) {
+            // TODO: check
+            return Err(());
+        }
+
+        Ok(self.cursor = Some(new))
+    }
+
+    // ticks down the cursor for one spot and if it can't, returns an error and allow extended placement
+    // two ways this can fail -> hit the bottom (cells() will return None) or hit another piece
+    fn try_tick_down(&mut self) {
+        // extract cursor from the optional
+        let cursor = self
+            .cursor
+            .as_ref()
+            .expect("Tried to tick an absent cursor");
+
+        // if cursor hit bottom, panic
+        debug_assert!(!self.cursor_has_hit_bottom());
+
+        // unwrap to catch errors
+        self.cursor = Some(self.ticked_down_cursor().unwrap());
+    }
+
+    pub fn cursor_has_hit_bottom(&self) -> bool {
+        self.cursor.is_some() && self.ticked_down_cursor().is_none()
+    }
+
+    // get the new cursor if it was ticked down
+    fn ticked_down_cursor(&self) -> Option<Piece> {
+        let Some(cursor) = self.cursor else {
+            return None;
+        };
+        let new = cursor.moved_by(Offset::new(0, -1));
+
+        (!self.matrix.is_clipping(&new)).then_some(new)
+    }
+
+    // moves cursor down and places it (series of tick downs), always succeeds
+    fn hard_drop(&mut self) {
+        // while we have a ticked down cursor, move it down
+        while let Some(new) = self.ticked_down_cursor() {
+            self.cursor = Some(new);
+        }
+
+        self.place_cursor()
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Color {
+    Yellow,
+    Cyan,
+    Purple,
+    Orange,
+    Blue,
+    Green,
+    Red,
+}
 // represents the tetris matrix
-struct Matrix([bool; Self::SIZE]);
+struct Matrix([Option<Color>; Self::SIZE]);
 
 impl Matrix {
     const WIDTH: usize = 10; // matrix 10 cells wide
@@ -70,25 +154,65 @@ impl Matrix {
     const SIZE: usize = Self::WIDTH * Self::HEIGHT;
 
     fn blank() -> Self {
-        Self([false; Self::SIZE])
+        Self([None; Self::SIZE])
     }
 
     // check whether x&y is within matrix bounds
-    fn in_bounds(Coordinate { x, y }: Coordinate) -> bool {
-        x < Self::WIDTH && y < Self::HEIGHT
+    fn on_matrix(coord: Coordinate) -> bool {
+        Self::valid_coord(coord) && coord.y < Self::HEIGHT
+    }
+
+    // it's valid on the matrix or above, since a piece can be just above
+    fn valid_coord(coord: Coordinate) -> bool {
+        coord.x < Self::WIDTH
     }
 
     // get index in 1d array of squares in matrix
     fn indexing(Coordinate { x, y }: Coordinate) -> usize {
         y * Self::WIDTH + x
     }
+
+    // check if piece is either above the matrix or in empty space on the matrix
+    fn is_clipping(&self, piece: &Piece) -> bool {
+        // if some cells are None, they are clipping because they are out of bounds
+        let Some(cells) = piece.cells() else {
+            return true;
+        };
+
+        cells
+            .into_iter()
+            .any(|coord| !Matrix::on_matrix(coord) || self[coord].is_some())
+    }
+
+    // check if piece is placeable on the matrix
+    fn is_placeable(&self, piece: &Piece) -> bool {
+        let Some(cells) = piece.cells() else {
+            return false;
+        };
+
+        cells
+            .into_iter()
+            .all(|coord| Matrix::on_matrix(coord) && self[coord].is_none())
+    }
+
+    fn is_moveable(&self, piece: &Piece) -> bool {
+        let Some(cells) = piece.cells() else {
+            return false;
+        };
+
+        // place all of the squares of the piece into the matrix
+        cells
+            .into_iter()
+            .all(|coord| Matrix::on_matrix(coord) && self[coord] == None)
+    }
 }
 
+// implement index trait so we can index it like an array
 impl Index<Coordinate> for Matrix {
-    type Output = bool;
+    type Output = Option<Color>;
 
     fn index(&self, coord: Coordinate) -> &Self::Output {
-        assert!(Self::in_bounds(coord));
+        assert!(Self::on_matrix(coord));
         &self.0[Self::indexing(coord)] // self.0 -> first element of a tuple
     }
 }
@@ -96,7 +220,7 @@ impl Index<Coordinate> for Matrix {
 // will return !reference! to cell (not copy of the value) if it is in bounds
 impl IndexMut<Coordinate> for Matrix {
     fn index_mut(&mut self, coord: Coordinate) -> &mut Self::Output {
-        assert!(Self::in_bounds(coord));
+        assert!(Self::on_matrix(coord));
         &mut self.0[Self::indexing(coord)] // self.0 -> first element of a tuple
     }
 }
