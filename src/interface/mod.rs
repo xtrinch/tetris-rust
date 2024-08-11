@@ -8,7 +8,7 @@ use sdl2::{
 };
 use std::cmp::min;
 
-use crate::engine::Engine;
+use crate::engine::{Engine, Matrix};
 
 pub struct Interface {
     engine: Engine,
@@ -17,6 +17,8 @@ pub struct Interface {
 const INIT_SIZE: Vector2<u32> = Vector2::new(1024, 1024);
 const BACKGROUND_COLOR: Color = Color::RGB(0x10, 0x10, 0x18);
 const MATRIX_COLOR: Color = Color::RGB(0x66, 0x77, 0x77);
+const PLACEHOLDER_2: Color = Color::RGB(0x66, 0x77, 0x77);
+const PLACEHOLDER_3: Color = Color::RGB(0x77, 0x88, 0x88);
 
 impl Interface {
     pub fn run(engine: Engine) {
@@ -52,7 +54,7 @@ impl Interface {
                 }
             }
 
-            draw(&mut canvas);
+            draw(&mut canvas, &engine);
         }
 
         let interface = Self { engine };
@@ -62,7 +64,7 @@ impl Interface {
     }
 }
 
-fn draw(canvas: &mut Canvas<Window>) {
+fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     canvas.set_draw_color(BACKGROUND_COLOR);
     canvas.clear();
     canvas.set_draw_color(Color::WHITE);
@@ -200,6 +202,30 @@ fn draw(canvas: &mut Canvas<Window>) {
     canvas.fill_rect(hold).unwrap();
     canvas.fill_rect(queue).unwrap();
     canvas.fill_rect(score).unwrap();
+
+    let matrix_origin = matrix.bottom_left();
+    let (matrix_width, matrix_height) = matrix.size();
+    for (coord, cell) in engine.cells() {
+        let coord = coord.cast::<i32>().unwrap();
+
+        // we get the width from the next cells coordinates because otherwise we end up with a rounding error
+        let this_x = (coord.x as u32 + 0) * matrix_width / Matrix::WIDTH as u32;
+        let this_y = (coord.y as u32 + 1) * matrix_height / Matrix::HEIGHT as u32;
+
+        let next_x = (coord.x as u32 + 1) * matrix_width / Matrix::WIDTH as u32;
+        let prev_y = (coord.y as u32 + 0) * matrix_height / Matrix::HEIGHT as u32; // we take the previous y because that one will be ABOVE it
+
+        // our matrix goes bottom left +, their draw matrix goes from top left +, so we need to do some translation
+        let cell_rect = Rect::new(
+            matrix_origin.x + this_x as i32,
+            matrix_origin.y - this_y as i32, // we subtract so we go up instead of down since origin is top left for the draw matrix (we also add one since the rect is drawn in the opposite direction)
+            next_x - this_x,                 // next x is "to the right"
+            this_y - prev_y,                 // prev_y is "higher"
+        );
+
+        canvas.set_draw_color(Color::WHITE);
+        canvas.fill_rect(cell_rect).unwrap();
+    }
 
     canvas.present();
 }

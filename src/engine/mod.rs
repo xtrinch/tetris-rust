@@ -1,11 +1,13 @@
 use std::ops::{Index, IndexMut};
 
-use cgmath::{Point2, Vector2};
+use cgmath::{EuclideanSpace, Point2, Vector2};
+use geometry::GridIncrement;
 use piece::{Kind as PieceKind, Piece};
 use rand::prelude::SliceRandom;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
 
+mod geometry;
 mod piece;
 
 type Coordinate = Point2<usize>;
@@ -133,6 +135,15 @@ impl Engine {
 
         self.place_cursor()
     }
+
+    // get an iterator for the cells of the matrix
+    pub fn cells(&self) -> CellIter<'_> {
+        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
+        CellIter {
+            position: Coordinate::origin(),
+            cells: self.matrix.0.iter(), // iter over first element of tuple which is our matrix array
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -146,12 +157,13 @@ pub enum Color {
     Red,
 }
 // represents the tetris matrix
-struct Matrix([Option<Color>; Self::SIZE]);
+pub struct Matrix([Option<Color>; Self::SIZE]);
 
+// zero is at bottom left
 impl Matrix {
-    const WIDTH: usize = 10; // matrix 10 cells wide
-    const HEIGHT: usize = 20; // matrix 20 cells high
-    const SIZE: usize = Self::WIDTH * Self::HEIGHT;
+    pub const WIDTH: usize = 10; // matrix 10 cells wide
+    pub const HEIGHT: usize = 20; // matrix 20 cells high
+    pub const SIZE: usize = Self::WIDTH * Self::HEIGHT;
 
     fn blank() -> Self {
         Self([None; Self::SIZE])
@@ -222,5 +234,67 @@ impl IndexMut<Coordinate> for Matrix {
     fn index_mut(&mut self, coord: Coordinate) -> &mut Self::Output {
         assert!(Self::on_matrix(coord));
         &mut self.0[Self::indexing(coord)] // self.0 -> first element of a tuple
+    }
+}
+
+// 'matrix is a lifetime parameter
+pub struct CellIter<'matrix> {
+    position: Coordinate, // starts at the bottom and goes up, tracks where we are in the iteration
+    // we introduce a new lifetime, because we're acessing memory of matrix with &Option<Color>
+    cells: ::std::slice::Iter<'matrix, Option<Color>>,
+}
+
+impl<'matrix> Iterator for CellIter<'matrix> {
+    type Item = (Coordinate, &'matrix Option<Color>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let Some(cell) = self.cells.next() else {
+            return None;
+        };
+
+        let coord = self.position;
+
+        // grid increment the position as we've defined in geometry mod
+        self.position.grid_inc();
+
+        // increment the position
+        return Some((coord, cell));
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn cell_iter() {
+        let mut matrix = Matrix::blank();
+        matrix[Coordinate::new(2, 0)] = Some(Color::Blue);
+        matrix[Coordinate::new(3, 1)] = Some(Color::Green);
+
+        let mut iter = CellIter {
+            position: Coordinate::origin(),
+            cells: matrix.0.iter(), // iter over first element of tuple which is our matrix array
+        };
+
+        let first_five = (&mut iter).take(5).collect::<Vec<_>>();
+        assert_eq!(
+            first_five,
+            [
+                (Coordinate::new(0, 0), &None),
+                (Coordinate::new(1, 0), &None),
+                (Coordinate::new(2, 0), &Some(Color::Blue)),
+                (Coordinate::new(3, 0), &None),
+                (Coordinate::new(4, 0), &None)
+            ]
+        );
+
+        let other_item = (&mut iter).skip(8).next();
+        assert_eq!(
+            other_item,
+            Some((Coordinate::new(3, 1), &Some(Color::Green)))
+        );
+
+        assert!(iter.all(|(_, contents)| contents.is_none()));
     }
 }
