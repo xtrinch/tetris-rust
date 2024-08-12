@@ -1,4 +1,6 @@
-use cgmath::Vector2;
+use crate::engine::{Engine, Matrix};
+use crate::interface::render_traits::ScreenColor;
+use cgmath::{ElementWise, EuclideanSpace, Vector2};
 use sdl2::{
     event::Event,
     pixels::Color,
@@ -8,7 +10,7 @@ use sdl2::{
 };
 use std::cmp::min;
 
-use crate::engine::{Engine, Matrix};
+mod render_traits;
 
 pub struct Interface {
     engine: Engine,
@@ -205,25 +207,40 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
 
     let matrix_origin = matrix.bottom_left();
     let (matrix_width, matrix_height) = matrix.size();
+    let matrix_dims = Vector2::from(matrix.size());
+    let matrix_cells = Vector2::new(Matrix::WIDTH, Matrix::HEIGHT)
+        .cast::<u32>()
+        .unwrap();
+
     for (coord, cell) in engine.cells() {
-        let coord = coord.cast::<i32>().unwrap();
+        let Some(cell_color) = cell else {
+            continue;
+        };
+        // // we get the width from the next cells coordinates because otherwise we end up with a rounding error
+        // let this_x = (coord.x as u32 + 0) * matrix_width / Matrix::WIDTH as u32;
+        // let this_y = (coord.y as u32 + 1) * matrix_height / Matrix::HEIGHT as u32;
 
-        // we get the width from the next cells coordinates because otherwise we end up with a rounding error
-        let this_x = (coord.x as u32 + 0) * matrix_width / Matrix::WIDTH as u32;
-        let this_y = (coord.y as u32 + 1) * matrix_height / Matrix::HEIGHT as u32;
+        // let next_x = (coord.x as u32 + 1) * matrix_width / Matrix::WIDTH as u32;
+        // let prev_y = (coord.y as u32 + 0) * matrix_height / Matrix::HEIGHT as u32; // we take the previous y because that one will be ABOVE it
 
-        let next_x = (coord.x as u32 + 1) * matrix_width / Matrix::WIDTH as u32;
-        let prev_y = (coord.y as u32 + 0) * matrix_height / Matrix::HEIGHT as u32; // we take the previous y because that one will be ABOVE it
+        // this is just a more complex version of the thing above which is much easier to understand
+        let coord = coord.to_vec().cast::<u32>().unwrap();
+        let this = (coord + Vector2::new(0, 1))
+            .mul_element_wise(matrix_dims)
+            .div_element_wise(matrix_cells);
+        let next = (coord + Vector2::new(1, 0))
+            .mul_element_wise(matrix_dims)
+            .div_element_wise(matrix_cells);
 
         // our matrix goes bottom left +, their draw matrix goes from top left +, so we need to do some translation
         let cell_rect = Rect::new(
-            matrix_origin.x + this_x as i32,
-            matrix_origin.y - this_y as i32, // we subtract so we go up instead of down since origin is top left for the draw matrix (we also add one since the rect is drawn in the opposite direction)
-            next_x - this_x,                 // next x is "to the right"
-            this_y - prev_y,                 // prev_y is "higher"
+            matrix_origin.x + this.x as i32,
+            matrix_origin.y - this.y as i32, // we subtract so we go up instead of down since origin is top left for the draw matrix (we also add one since the rect is drawn in the opposite direction)
+            next.x - this.x,                 // next x is "to the right"
+            this.y - next.y,                 // prev_y is "higher"
         );
 
-        canvas.set_draw_color(Color::WHITE);
+        canvas.set_draw_color(cell_color.screen_color());
         canvas.fill_rect(cell_rect).unwrap();
     }
 

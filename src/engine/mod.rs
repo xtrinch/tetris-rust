@@ -46,6 +46,13 @@ impl Engine {
         }
     }
 
+    pub fn with_matrix(matrix: Matrix) -> Self {
+        Self {
+            matrix,
+            ..Self::new()
+        }
+    }
+
     // once bag where we pick new pieces from is empty, we need to refill it
     fn refill_bag(&mut self, // mutable reference to self because we are modifying ourselves
     ) {
@@ -165,7 +172,7 @@ impl Matrix {
     pub const HEIGHT: usize = 20; // matrix 20 cells high
     pub const SIZE: usize = Self::WIDTH * Self::HEIGHT;
 
-    fn blank() -> Self {
+    pub fn blank() -> Self {
         Self([None; Self::SIZE])
     }
 
