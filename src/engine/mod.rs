@@ -1,16 +1,19 @@
+use core::range::Range;
 use std::ops::{Index, IndexMut};
+use std::time::Duration;
 
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use geometry::GridIncrement;
-use piece::{Kind as PieceKind, Piece};
+use piece::{Kind as PieceKind, Piece, Rotation};
 use rand::prelude::SliceRandom;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
+use std::slice::ArrayChunks;
 
 mod geometry;
-mod piece;
+pub mod piece;
 
-type Coordinate = Point2<usize>;
+pub type Coordinate = Point2<usize>;
 type Offset = Vector2<isize>;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -34,6 +37,7 @@ pub struct Engine {
     bag: Vec<PieceKind>, // this is from where tetris piece types are taken from during gameplay (7 are shuffled, taken out one by one, then process repeats)
     rng: ThreadRng,      // random number generator instance
     cursor: Option<Piece>, // current active piece (the one falling down), optional
+    level: u8,
 }
 
 impl Engine {
@@ -43,6 +47,7 @@ impl Engine {
             bag: Vec::new(),
             rng: thread_rng(),
             cursor: None,
+            level: 1,
         }
     }
 
@@ -87,7 +92,7 @@ impl Engine {
     }
 
     // returns Ok(()), Err(()) of unit, represented in memory same as a bool
-    fn move_cursor(&mut self, kind: MoveKind) -> Result<(), ()> {
+    pub fn move_cursor(&mut self, kind: MoveKind) -> Result<(), ()> {
         let Some(cursor) = self.cursor.as_mut() else {
             return Ok(()); // because it's OK to move a cursor that isn't there, it would just do nothing
         };
@@ -100,12 +105,27 @@ impl Engine {
             return Err(());
         }
 
-        Ok(self.cursor = Some(new))
+        self.cursor = Some(new);
+        Ok(())
+    }
+
+    pub fn cursor_info(&self) -> Option<([Coordinate; Piece::CELL_COUNT], Color)> {
+        let cursor = self.cursor?; // early return a None if it was None
+        Some((cursor.cells().unwrap(), cursor.kind.color()))
+    }
+
+    pub fn DEBUG_test_cursor_local(&mut self, kind: PieceKind, position: Offset) {
+        let piece = Piece {
+            kind,
+            rotation: Rotation::N,
+            position,
+        };
+        self.cursor = Some(piece)
     }
 
     // ticks down the cursor for one spot and if it can't, returns an error and allow extended placement
     // two ways this can fail -> hit the bottom (cells() will return None) or hit another piece
-    fn try_tick_down(&mut self) {
+    pub fn try_tick_down(&mut self) {
         // extract cursor from the optional
         let cursor = self
             .cursor
@@ -134,7 +154,7 @@ impl Engine {
     }
 
     // moves cursor down and places it (series of tick downs), always succeeds
-    fn hard_drop(&mut self) {
+    pub fn hard_drop(&mut self) {
         // while we have a ticked down cursor, move it down
         while let Some(new) = self.ticked_down_cursor() {
             self.cursor = Some(new);
@@ -150,6 +170,25 @@ impl Engine {
             position: Coordinate::origin(),
             cells: self.matrix.0.iter(), // iter over first element of tuple which is our matrix array
         }
+    }
+
+    // how long the tetrimino should drop for a certain level
+    pub fn drop_time(&self) -> Duration {
+        // equation from the docs: (0.8 - ((level - 1) * 0.007))^(level-1)
+        let level_index = self.level + 1;
+        let seconds_per_line = (0.8 - ((level_index) as f32 * 0.007)).powi(level_index as i32);
+        Duration::from_secs_f32(seconds_per_line)
+    }
+
+    // when a line is full, it needs to be removed from the screen
+    pub fn line_clear(&mut self, mut animation: impl FnMut(&[usize])) {
+        // identify full lines
+        let lines: Vec<usize> = self.matrix.full_lines();
+
+        // runs the animation of the removal of those lines
+        animation(lines.as_slice());
+
+        self.matrix.clear_lines(lines.as_slice());
     }
 }
 
@@ -191,16 +230,16 @@ impl Matrix {
         y * Self::WIDTH + x
     }
 
-    // check if piece is either above the matrix or in empty space on the matrix
+    // check if piece is either above the matrix or in a full space on the matrix
     fn is_clipping(&self, piece: &Piece) -> bool {
         // if some cells are None, they are clipping because they are out of bounds
         let Some(cells) = piece.cells() else {
             return true;
         };
 
-        cells
-            .into_iter()
-            .any(|coord| !Matrix::on_matrix(coord) || self[coord].is_some())
+        cells.into_iter().any(|coord| {
+            !Matrix::valid_coord(coord) || (Matrix::on_matrix(coord) && self[coord].is_some())
+        })
     }
 
     // check if piece is placeable on the matrix
@@ -223,6 +262,39 @@ impl Matrix {
         cells
             .into_iter()
             .all(|coord| Matrix::on_matrix(coord) && self[coord] == None)
+    }
+
+    // max 4 at a time because the largest piece spans only 4 lines
+    fn clear_lines(&mut self, indices: &[usize]) {
+        // sequence of removal matters - they should be removed top to bottom
+        debug_assert!(indices.is_sorted());
+
+        // iterate in reverse
+        for index in indices.iter().rev() {
+            let start_of_remainder = Self::WIDTH * (index + 1); // this is the end of the range that we want to delete
+
+            // copy over the range from the top into the existing line that we wish to remove
+            self.0.copy_within(
+                start_of_remainder.., // start of remainder to the end
+                start_of_remainder - Self::WIDTH,
+            );
+
+            // clear the top line
+            self.0[Self::SIZE - Self::WIDTH..].fill(None)
+        }
+    }
+
+    // returns an iterator of the slices of the lines
+    fn lines(&self) -> ArrayChunks<'_, Option<Color>, { Self::WIDTH }> {
+        self.0.array_chunks()
+    }
+
+    fn full_lines(&mut self) -> Vec<usize> {
+        self.lines()
+            .enumerate()
+            .filter(|(_, line)| line.iter().all(Option::is_some)) // where every cell is full
+            .map(|(i, _)| i) // take the indices
+            .collect() // collect into the return type
     }
 }
 
@@ -252,10 +324,10 @@ pub struct CellIter<'matrix> {
 }
 
 impl<'matrix> Iterator for CellIter<'matrix> {
-    type Item = (Coordinate, &'matrix Option<Color>);
+    type Item = (Coordinate, Option<Color>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(cell) = self.cells.next() else {
+        let Some(&cell) = self.cells.next() else {
             return None;
         };
 
@@ -265,7 +337,7 @@ impl<'matrix> Iterator for CellIter<'matrix> {
         self.position.grid_inc();
 
         // increment the position
-        return Some((coord, cell));
+        Some((coord, cell))
     }
 }
 
@@ -288,18 +360,18 @@ mod test {
         assert_eq!(
             first_five,
             [
-                (Coordinate::new(0, 0), &None),
-                (Coordinate::new(1, 0), &None),
-                (Coordinate::new(2, 0), &Some(Color::Blue)),
-                (Coordinate::new(3, 0), &None),
-                (Coordinate::new(4, 0), &None)
+                (Coordinate::new(0, 0), None),
+                (Coordinate::new(1, 0), None),
+                (Coordinate::new(2, 0), Some(Color::Blue)),
+                (Coordinate::new(3, 0), None),
+                (Coordinate::new(4, 0), None)
             ]
         );
 
         let other_item = (&mut iter).skip(8).next();
         assert_eq!(
             other_item,
-            Some((Coordinate::new(3, 1), &Some(Color::Green)))
+            Some((Coordinate::new(3, 1), Some(Color::Green)))
         );
 
         assert!(iter.all(|(_, contents)| contents.is_none()));

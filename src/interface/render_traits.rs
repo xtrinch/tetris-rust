@@ -5,6 +5,7 @@ pub trait ScreenColor {
     fn screen_color(&self) -> SdlColor;
 }
 
+// we pull it out rather than putting it directly on the semantic color so this is a member of the interface and NOT the engine
 impl ScreenColor for SemanticColor {
     fn screen_color(&self) -> SdlColor {
         match self {

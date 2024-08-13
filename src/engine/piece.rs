@@ -1,4 +1,4 @@
-use cgmath::{ElementWise, Vector2, Zero};
+use cgmath::Zero;
 
 use super::{Color, Matrix};
 use super::{Coordinate, Offset};
@@ -13,7 +13,7 @@ pub(super) struct Piece {
 }
 
 impl Piece {
-    const CELL_COUNT: usize = 4;
+    pub const CELL_COUNT: usize = 4;
 
     // will return a new piece in the new moved position
     pub fn moved_by(&self, offset: Offset) -> Self {
@@ -23,10 +23,11 @@ impl Piece {
         }
     }
 
-    // returns coordinates of piece
+    // returns coordinates of piece; None on an invalid cursor position;
+    // returns an array of length CELL_COUNT
     pub fn cells(&self) -> Option<[Coordinate; Self::CELL_COUNT]> {
         // array of 4 offsets which we need to convert into coordinates
-        let offsets = dbg!(self.kind.cells().map(self.rotator())).map(self.positioner());
+        let offsets = self.kind.cells().map(self.rotator()).map(self.positioner());
 
         let mut coords = [Coordinate::origin(); Self::CELL_COUNT];
 
@@ -53,7 +54,7 @@ impl Piece {
         |cell| match self.kind {
             Kind::O => cell, // skip rotation for square as it's defined as 3x3 and it's not rotated
             _ => {
-                let rotated = dbg!(cell * self.rotation);
+                let rotated = cell * self.rotation;
                 // add in the intrinsic offset multiplied by the grid size
                 let grid_offset = self.rotation.intrinsic_offset() * (self.kind.grid_size() - 1); // 0 is shared with these rotations so we need to move by grid size -1!
                 rotated + grid_offset
