@@ -22,7 +22,16 @@ type Offset = Vector2<isize>;
 
 // represents the game engine
 pub struct Engine {
-    matrix: Matrix,
+    matrix: Matrix<
+        { Self::MATRIX_WIDTH },
+        { Self::MATRIX_HEIGHT },
+        { Self::MATRIX_WIDTH * Self::MATRIX_HEIGHT },
+    >,
+    next_matrix: Matrix<
+        { Self::UP_NEXT_MATRIX_WIDTH },
+        { Self::UP_NEXT_MATRIX_HEIGHT },
+        { Self::UP_NEXT_MATRIX_WIDTH * Self::UP_NEXT_MATRIX_HEIGHT },
+    >,
     next: Vec<PieceKind>, // next up, these are also visible on the screen (7), they are filled from the bag or randomly
     bag: Vec<PieceKind>, // this is from where tetris piece types are taken from during gameplay (7 are shuffled, taken out one by one, then process repeats)
     rng: ThreadRng,      // random number generator instance
@@ -31,13 +40,28 @@ pub struct Engine {
 }
 
 impl Engine {
+    pub const MATRIX_WIDTH: usize = 10; // matrix 10 cells wide
+    pub const MATRIX_HEIGHT: usize = 20; // matrix 20 cells high
+
+    pub const UP_NEXT_MATRIX_WIDTH: usize = 4; // matrix 10 cells wide
+    pub const UP_NEXT_MATRIX_HEIGHT: usize = 4; // matrix 20 cells high
+
     pub fn new() -> Self {
         let mut rng = thread_rng();
         let mut up_next = Vec::from(PieceKind::ALL.as_slice());
         up_next.shuffle(&mut rng);
 
         Engine {
-            matrix: Matrix::blank(),
+            matrix: Matrix::<
+                { Self::MATRIX_WIDTH },
+                { Self::MATRIX_HEIGHT },
+                { Self::MATRIX_WIDTH * Self::MATRIX_HEIGHT },
+            >::blank(),
+            next_matrix: Matrix::<
+                { Self::UP_NEXT_MATRIX_WIDTH },
+                { Self::UP_NEXT_MATRIX_HEIGHT },
+                { Self::UP_NEXT_MATRIX_WIDTH * Self::UP_NEXT_MATRIX_HEIGHT },
+            >::blank(),
             bag: Vec::new(),
             next: up_next,
             rng: rng,
@@ -46,7 +70,13 @@ impl Engine {
         }
     }
 
-    pub fn with_matrix(matrix: Matrix) -> Self {
+    pub fn with_matrix(
+        matrix: Matrix<
+            { Self::MATRIX_WIDTH },
+            { Self::MATRIX_HEIGHT },
+            { Self::MATRIX_WIDTH * Self::MATRIX_HEIGHT },
+        >,
+    ) -> Self {
         Self {
             matrix,
             ..Self::new()
@@ -124,6 +154,8 @@ impl Engine {
         &self,
     ) -> Option<([Coordinate; Piece::CELL_COUNT], TetriminoColor, Rotation)> {
         let cursor = self.cursor?; // early return a None if it was None
+        dbg!(cursor);
+        dbg!(cursor.cells().unwrap());
         Some((
             cursor.cells().unwrap(),
             cursor.kind.color(),
@@ -223,11 +255,35 @@ impl Engine {
     }
 
     // get an iterator for the cells of the matrix
-    pub fn cells(&self) -> CellIter<'_> {
+    pub fn cells(
+        &self,
+    ) -> CellIter<
+        '_,
+        { Self::MATRIX_WIDTH },
+        { Self::MATRIX_HEIGHT },
+        { Self::MATRIX_WIDTH * Self::MATRIX_HEIGHT },
+    > {
         // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
         CellIter {
             position: Coordinate::origin(),
-            cells: self.matrix.0.iter(), // iter over first element of tuple which is our matrix array
+            cells: self.matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
+        }
+    }
+
+    // TODO: this and the function above can be combined
+    // get an iterator for the cells of the matrix
+    pub fn cells_up_next(
+        &self,
+    ) -> CellIter<
+        '_,
+        { Self::UP_NEXT_MATRIX_WIDTH },
+        { Self::UP_NEXT_MATRIX_HEIGHT },
+        { Self::UP_NEXT_MATRIX_WIDTH * Self::UP_NEXT_MATRIX_HEIGHT },
+    > {
+        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
+        CellIter {
+            position: Coordinate::origin(),
+            cells: self.next_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
         }
     }
 
@@ -259,13 +315,13 @@ mod test {
 
     #[test]
     fn cell_iter() {
-        let mut matrix = Matrix::blank();
+        let mut matrix = Matrix::<10, 20, { 10 * 20 }>::blank();
         matrix[Coordinate::new(2, 0)] = Some(TetriminoColor::Blue);
         matrix[Coordinate::new(3, 1)] = Some(TetriminoColor::Green);
 
-        let mut iter = CellIter {
+        let mut iter: CellIter<10, 20, { 10 * 20 }> = CellIter {
             position: Coordinate::origin(),
-            cells: matrix.0.iter(), // iter over first element of tuple which is our matrix array
+            cells: matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
         };
 
         let first_five = (&mut iter).take(5).collect::<Vec<_>>();

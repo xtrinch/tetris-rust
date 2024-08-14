@@ -95,7 +95,6 @@ impl Interface {
                         timer = timer_subsystem.add_timer(
                             engine.drop_time().as_millis() as _,
                             Box::new(|| {
-                                println!("Tick event timer triggered");
                                 event_subsystem.push_custom_event(Tick).unwrap();
                                 0
                             }),
@@ -255,7 +254,12 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         canvas.fill_rect(Rect::from(subrect)).unwrap();
     }
 
-    let mut cell_draw_ctx = CellDrawContext {
+    // TODO: const to params
+    let mut cell_draw_ctx: CellDrawContext<
+        { Engine::MATRIX_WIDTH },
+        { Engine::MATRIX_HEIGHT },
+        { Engine::MATRIX_HEIGHT * Engine::MATRIX_WIDTH },
+    > = CellDrawContext {
         origin: matrix1.bottom_left(),
         dims: Vector2::from(matrix1.size()),
         canvas,
@@ -275,18 +279,34 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         }
     }
 
+    let mut up_next_cell_draw_ctx: CellDrawContext<
+        { Engine::UP_NEXT_MATRIX_WIDTH },
+        { Engine::UP_NEXT_MATRIX_HEIGHT },
+        { Engine::UP_NEXT_MATRIX_HEIGHT * Engine::UP_NEXT_MATRIX_WIDTH },
+    > = CellDrawContext {
+        origin: up_next1.bottom_left(),
+        dims: Vector2::from(up_next1.size()),
+        canvas,
+    };
+
+    for (coord, cell) in engine.cells_up_next() {
+        up_next_cell_draw_ctx.draw_border(coord);
+    }
+
     canvas.present();
 }
 
 // we need a lifetime because we have a mutable reference
-struct CellDrawContext<'canvas> {
+struct CellDrawContext<'canvas, const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> {
     origin: Point2<i32>,
     dims: Vector2<u32>,
     canvas: &'canvas mut Canvas<Window>,
 }
 
-impl CellDrawContext<'_> {
-    const CELL_COUNT: Vector2<u32> = Vector2::new(Matrix::WIDTH as u32, Matrix::HEIGHT as u32);
+impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize>
+    CellDrawContext<'_, { WIDTH }, { HEIGHT }, { SIZE }>
+{
+    const CELL_COUNT: Vector2<u32> = Vector2::new(WIDTH as u32, HEIGHT as u32);
 
     fn get_rect(&mut self, coord: Coordinate) -> Rect {
         // // we get the width from the next cells coordinates because otherwise we end up with a rounding error

@@ -1,8 +1,8 @@
 use cgmath::Zero;
 
 use super::piece_kind::PieceKind;
-use super::Matrix;
 use super::{Coordinate, Offset};
+use super::{Engine, Matrix};
 use cgmath::EuclideanSpace;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -38,12 +38,13 @@ impl Piece {
             let positive_offset = offset.cast::<usize>()?; // the question mark denotes that if this returns none, the whole thing will return none
             let coord = Coordinate::from_vec(positive_offset);
 
-            // check that the position is within bounds, the negative check is already done by the conversion above
-            if Matrix::valid_coord(coord) {
-                *coord_slot = coord;
-            } else {
-                return None;
-            }
+            // TODO: reintroduce check?
+            // // check that the position is within bounds, the negative check is already done by the conversion above
+            // if self.valid_coord(coord) {
+            *coord_slot = coord;
+            // } else {
+            //     return None;
+            // }
         }
 
         Some(coords)

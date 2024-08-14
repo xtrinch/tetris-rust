@@ -6,31 +6,31 @@ use std::{
 };
 
 // represents the tetris matrix
-pub struct Matrix(pub [Option<TetriminoColor>; Self::SIZE]);
+pub struct Matrix<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> {
+    pub matrix: [Option<TetriminoColor>; SIZE],
+}
 
 // zero is at bottom left
-impl Matrix {
-    pub const WIDTH: usize = 10; // matrix 10 cells wide
-    pub const HEIGHT: usize = 20; // matrix 20 cells high
-    pub const SIZE: usize = Self::WIDTH * Self::HEIGHT;
-
+impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Matrix<WIDTH, HEIGHT, SIZE> {
     pub fn blank() -> Self {
-        Self([None; Self::SIZE])
+        Self {
+            matrix: [None; SIZE],
+        }
     }
 
     // check whether x&y is within matrix bounds
-    fn on_matrix(coord: Coordinate) -> bool {
-        Self::valid_coord(coord) && coord.y < Self::HEIGHT
+    fn on_matrix(&self, coord: Coordinate) -> bool {
+        self.valid_coord(coord) && coord.y < HEIGHT
     }
 
     // it's valid on the matrix or above, since a piece can be just above
-    pub fn valid_coord(coord: Coordinate) -> bool {
-        coord.x < Self::WIDTH
+    pub fn valid_coord(&self, coord: Coordinate) -> bool {
+        coord.x < WIDTH
     }
 
     // get index in 1d array of squares in matrix
     fn indexing(Coordinate { x, y }: Coordinate) -> usize {
-        y * Self::WIDTH + x
+        y * WIDTH + x
     }
 
     // check if piece is either above the matrix or in a full space on the matrix
@@ -41,7 +41,7 @@ impl Matrix {
         };
 
         cells.into_iter().any(|coord| {
-            !Matrix::valid_coord(coord) || (Matrix::on_matrix(coord) && self[coord].is_some())
+            !self.valid_coord(coord) || (self.on_matrix(coord) && self[coord].is_some())
         })
     }
 
@@ -53,7 +53,7 @@ impl Matrix {
 
         cells
             .into_iter()
-            .all(|coord| Matrix::on_matrix(coord) && self[coord].is_none())
+            .all(|coord| self.on_matrix(coord) && self[coord].is_none())
     }
 
     fn is_moveable(&self, piece: &Piece) -> bool {
@@ -64,7 +64,7 @@ impl Matrix {
         // place all of the squares of the piece into the matrix
         cells
             .into_iter()
-            .all(|coord| Matrix::on_matrix(coord) && self[coord] == None)
+            .all(|coord| self.on_matrix(coord) && self[coord] == None)
     }
 
     // max 4 at a time because the largest piece spans only 4 lines
@@ -74,22 +74,22 @@ impl Matrix {
 
         // iterate in reverse
         for index in indices.iter().rev() {
-            let start_of_remainder = Self::WIDTH * (index + 1); // this is the end of the range that we want to delete
+            let start_of_remainder = WIDTH * (index + 1); // this is the end of the range that we want to delete
 
             // copy over the range from the top into the existing line that we wish to remove
-            self.0.copy_within(
+            self.matrix.copy_within(
                 start_of_remainder.., // start of remainder to the end
-                start_of_remainder - Self::WIDTH,
+                start_of_remainder - WIDTH,
             );
 
             // clear the top line
-            self.0[Self::SIZE - Self::WIDTH..].fill(None)
+            self.matrix[SIZE - WIDTH..].fill(None)
         }
     }
 
     // returns an iterator of the slices of the lines
-    fn lines(&self) -> ArrayChunks<'_, Option<TetriminoColor>, { Self::WIDTH }> {
-        self.0.array_chunks()
+    fn lines(&self) -> ArrayChunks<'_, Option<TetriminoColor>, { WIDTH }> {
+        self.matrix.array_chunks()
     }
 
     pub fn full_lines(&mut self) -> Vec<usize> {
@@ -102,31 +102,37 @@ impl Matrix {
 }
 
 // implement index trait so we can index it like an array
-impl Index<Coordinate> for Matrix {
+impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Index<Coordinate>
+    for Matrix<WIDTH, HEIGHT, SIZE>
+{
     type Output = Option<TetriminoColor>;
 
     fn index(&self, coord: Coordinate) -> &Self::Output {
-        assert!(Self::on_matrix(coord));
-        &self.0[Self::indexing(coord)] // self.0 -> first element of a tuple
+        assert!(self.on_matrix(coord));
+        &self.matrix[Self::indexing(coord)] // self.0 -> first element of a tuple
     }
 }
 
 // will return !reference! to cell (not copy of the value) if it is in bounds
-impl IndexMut<Coordinate> for Matrix {
+impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> IndexMut<Coordinate>
+    for Matrix<WIDTH, HEIGHT, SIZE>
+{
     fn index_mut(&mut self, coord: Coordinate) -> &mut Self::Output {
-        assert!(Self::on_matrix(coord));
-        &mut self.0[Self::indexing(coord)] // self.0 -> first element of a tuple
+        assert!(self.on_matrix(coord));
+        &mut self.matrix[Self::indexing(coord)] // self.0 -> first element of a tuple
     }
 }
 
 // 'matrix is a lifetime parameter
-pub struct CellIter<'matrix> {
+pub struct CellIter<'matrix, const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> {
     pub position: Coordinate, // starts at the bottom and goes up, tracks where we are in the iteration
     // we introduce a new lifetime, because we're acessing memory of matrix with &Option<Color>
     pub cells: ::std::slice::Iter<'matrix, Option<TetriminoColor>>,
 }
 
-impl<'matrix> Iterator for CellIter<'matrix> {
+impl<'matrix, const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Iterator
+    for CellIter<'matrix, WIDTH, HEIGHT, SIZE>
+{
     type Item = (Coordinate, Option<TetriminoColor>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -137,7 +143,8 @@ impl<'matrix> Iterator for CellIter<'matrix> {
         let coord = self.position;
 
         // grid increment the position as we've defined in geometry mod
-        self.position.grid_inc();
+        // self.position.grid_inc();
+        <Coordinate as GridIncrement<WIDTH>>::grid_inc(&mut self.position);
 
         // increment the position
         Some((coord, cell))
