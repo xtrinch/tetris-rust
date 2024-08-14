@@ -1,4 +1,4 @@
-use super::{Coordinate, Matrix};
+use super::{matrix::Matrix, Coordinate};
 
 // add a trait so we can grid increment a position on the matrix
 pub trait GridIncrement: Sized {

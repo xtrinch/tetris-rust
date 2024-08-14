@@ -1,7 +1,8 @@
 use crate::engine::color::TetriminoColor;
+use crate::engine::matrix::Matrix;
 use crate::engine::move_kind::MoveKind;
 use crate::engine::piece::Rotation;
-use crate::engine::{Coordinate, Engine, Matrix};
+use crate::engine::{Coordinate, Engine};
 use crate::interface::render_traits::ScreenColor;
 use cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
 use sdl2::keyboard::Keycode;

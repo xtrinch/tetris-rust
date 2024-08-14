@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![feature(is_sorted, array_chunks, new_range_api)]
 
-use engine::{Engine, Matrix};
+use engine::{matrix::Matrix, Engine};
 use interface::Interface;
 
 mod engine;
