@@ -6,15 +6,23 @@ use std::{
 };
 
 // represents the tetris matrix
-pub struct Matrix<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> {
-    pub matrix: [Option<TetriminoColor>; SIZE],
+pub struct Matrix<const WIDTH: usize, const HEIGHT: usize>
+where
+    [usize; WIDTH * HEIGHT]:,
+{
+    pub matrix: [Option<TetriminoColor>; WIDTH * HEIGHT],
 }
 
 // zero is at bottom left
-impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Matrix<WIDTH, HEIGHT, SIZE> {
+impl<const WIDTH: usize, const HEIGHT: usize> Matrix<WIDTH, HEIGHT>
+where
+    [usize; WIDTH * HEIGHT]:,
+{
+    const SIZE: usize = WIDTH * HEIGHT;
+
     pub fn blank() -> Self {
         Self {
-            matrix: [None; SIZE],
+            matrix: [None; WIDTH * HEIGHT],
         }
     }
 
@@ -83,7 +91,7 @@ impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Matrix<WIDTH, H
             );
 
             // clear the top line
-            self.matrix[SIZE - WIDTH..].fill(None)
+            self.matrix[Self::SIZE - WIDTH..].fill(None)
         }
     }
 
@@ -106,8 +114,9 @@ impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Matrix<WIDTH, H
 }
 
 // implement index trait so we can index it like an array
-impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Index<Coordinate>
-    for Matrix<WIDTH, HEIGHT, SIZE>
+impl<const WIDTH: usize, const HEIGHT: usize> Index<Coordinate> for Matrix<WIDTH, HEIGHT>
+where
+    [usize; WIDTH * HEIGHT]:,
 {
     type Output = Option<TetriminoColor>;
 
@@ -118,8 +127,9 @@ impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Index<Coordinat
 }
 
 // will return !reference! to cell (not copy of the value) if it is in bounds
-impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> IndexMut<Coordinate>
-    for Matrix<WIDTH, HEIGHT, SIZE>
+impl<const WIDTH: usize, const HEIGHT: usize> IndexMut<Coordinate> for Matrix<WIDTH, HEIGHT>
+where
+    [usize; WIDTH * HEIGHT]:,
 {
     fn index_mut(&mut self, coord: Coordinate) -> &mut Self::Output {
         assert!(self.on_matrix(coord));
@@ -128,14 +138,14 @@ impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> IndexMut<Coordi
 }
 
 // 'matrix is a lifetime parameter
-pub struct CellIter<'matrix, const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> {
+pub struct CellIter<'matrix, const WIDTH: usize, const HEIGHT: usize> {
     pub position: Coordinate, // starts at the bottom and goes up, tracks where we are in the iteration
     // we introduce a new lifetime, because we're acessing memory of matrix with &Option<Color>
     pub cells: ::std::slice::Iter<'matrix, Option<TetriminoColor>>,
 }
 
-impl<'matrix, const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Iterator
-    for CellIter<'matrix, WIDTH, HEIGHT, SIZE>
+impl<'matrix, const WIDTH: usize, const HEIGHT: usize> Iterator
+    for CellIter<'matrix, WIDTH, HEIGHT>
 {
     type Item = (Coordinate, Option<TetriminoColor>);
 

@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![feature(array_chunks, new_range_api)]
+#![feature(generic_const_exprs, array_chunks, new_range_api)]
 
 use engine::Engine;
 use interface::Interface;
