@@ -23,6 +23,7 @@ type Offset = Vector2<isize>;
 // represents the game engine
 pub struct Engine {
     matrix: Matrix,
+    next: Vec<PieceKind>, // next up, these are also visible on the screen (7), they are filled from the bag or randomly
     bag: Vec<PieceKind>, // this is from where tetris piece types are taken from during gameplay (7 are shuffled, taken out one by one, then process repeats)
     rng: ThreadRng,      // random number generator instance
     cursor: Option<Piece>, // current active piece (the one falling down), optional
@@ -31,10 +32,15 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
+        let mut rng = thread_rng();
+        let mut up_next = Vec::from(PieceKind::ALL.as_slice());
+        up_next.shuffle(&mut rng);
+
         Engine {
             matrix: Matrix::blank(),
             bag: Vec::new(),
-            rng: thread_rng(),
+            next: up_next,
+            rng: rng,
             cursor: None,
             level: 1,
         }
@@ -214,7 +220,6 @@ impl Engine {
 
         // since we could press keyboard multiple times during one tick cycle, we need to not panic if there's no cursor
         self.try_place_cursor();
-        self.create_top_cursor();
     }
 
     // get an iterator for the cells of the matrix

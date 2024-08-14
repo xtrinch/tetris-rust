@@ -81,6 +81,7 @@ impl Interface {
         let mut dirty: bool = true;
         let mut timer;
         let mut lock_down: bool = false;
+        let mut paused = false;
 
         engine.create_top_cursor();
 
@@ -91,6 +92,19 @@ impl Interface {
                     // log any events with dbg
                     Event::Quit { .. } => return,
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
+                        timer = timer_subsystem.add_timer(
+                            engine.drop_time().as_millis() as _,
+                            Box::new(|| {
+                                println!("Tick event timer triggered");
+                                event_subsystem.push_custom_event(Tick).unwrap();
+                                0
+                            }),
+                        );
+
+                        if paused {
+                            break;
+                        };
+
                         // if we have a cursor to tick down, tick it down :)
                         if engine.ticked_down_cursor().is_some() {
                             engine.try_tick_down();
@@ -100,15 +114,6 @@ impl Interface {
                                 event_subsystem.push_custom_event(LockdownTick).unwrap();
                             }
                         }
-
-                        timer = timer_subsystem.add_timer(
-                            engine.drop_time().as_millis() as _,
-                            Box::new(|| {
-                                println!("Tick event timer triggered");
-                                event_subsystem.push_custom_event(Tick).unwrap();
-                                0
-                            }),
-                        );
 
                         dirty = true;
                     }
@@ -131,10 +136,14 @@ impl Interface {
                                 Input::Move(kind) => drop(engine.move_cursor(kind)),
                                 Input::HardDrop => {
                                     engine.hard_drop(); // hard drop
+                                    engine.create_top_cursor();
                                     lock_down = true
                                 }
                                 Input::SoftDrop => println!("Soft drop tick"),
                                 Input::Rotation(kind) => engine.rotate_cursor(kind),
+                                Input::Pause => {
+                                    paused = !paused;
+                                }
                             }
                             dirty = true
                         }
@@ -161,6 +170,7 @@ enum Input {
     Rotation(Rotation),
     SoftDrop,
     HardDrop,
+    Pause,
 }
 
 // map various keyboard keys to actions within the game
@@ -178,6 +188,7 @@ impl Input {
             }
             Keycode::Down => Self::SoftDrop,
             Keycode::Space => Self::HardDrop,
+            Keycode::NUM_1 => Self::Pause,
             _ => return Err(()),
         })
     }

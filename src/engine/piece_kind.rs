@@ -63,6 +63,7 @@ impl PieceKind {
         }
     }
 
+    // TODO: yellow starts one too low
     pub fn north_height(&self) -> u8 {
         match self {
             PieceKind::J => 2,
