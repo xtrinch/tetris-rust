@@ -1,6 +1,6 @@
 use crate::engine::color::TetriminoColor;
+use crate::engine::move_kind::MoveKind;
 use crate::engine::piece::Rotation;
-use crate::engine::MoveKind;
 use crate::engine::{Coordinate, Engine, Matrix};
 use crate::interface::render_traits::ScreenColor;
 use cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};

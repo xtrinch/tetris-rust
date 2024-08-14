@@ -4,6 +4,7 @@ use std::time::Duration;
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use color::TetriminoColor;
 use geometry::GridIncrement;
+use move_kind::MoveKind;
 use piece::{Piece, Rotation};
 use piece_kind::PieceKind;
 use rand::prelude::SliceRandom;
@@ -13,26 +14,12 @@ use std::slice::ArrayChunks;
 
 pub mod color;
 mod geometry;
+pub mod move_kind;
 pub mod piece;
 mod piece_kind;
 
 pub type Coordinate = Point2<usize>;
 type Offset = Vector2<isize>;
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum MoveKind {
-    Left,
-    Right,
-}
-
-impl MoveKind {
-    fn offset(&self) -> Offset {
-        match self {
-            MoveKind::Left => Offset::new(-1, 0),
-            MoveKind::Right => Offset::new(1, 0),
-        }
-    }
-}
 
 // represents the game engine
 pub struct Engine {
