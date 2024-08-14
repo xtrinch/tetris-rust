@@ -214,49 +214,9 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     let ui_square1 = SubRect::absolute(viewport, (1.0, 1.0), None);
     // canvas.draw_rect(Rect::from(ui_square1)).unwrap();
 
-    // let matrix = {
-    //     // where the tetriminos fly down - the container of it (we will not draw it but use it for layouting)
-    //     let mut middle_section = ui_square.clone();
-    //     middle_section.set_width(middle_section.width() / 2);
-    //     middle_section.center_on(ui_square.center());
-
-    //     // the actual matrix container
-    //     let mut matrix = middle_section.clone();
-    //     matrix.resize(
-    //         (matrix.width() as f32 * (7.0 / 8.0)) as _, // 7/8ths of full height/width
-    //         (matrix.height() as f32 * (7.0 / 8.0)) as _,
-    //     );
-    //     matrix.center_on(middle_section.center());
-
-    //     matrix
-    // };
-
     let matrix1 = ui_square1
         .sub_rect((0.5, 1.0), None) // half of the width and full height, center alignment by default
         .sub_rect((7.0 / 8.0, 7.0 / 8.0), None); // 7/8ths of the width and 7/8ths of the height, center by default
-
-    // top right container for coming up tetrimino
-    // let up_next: Rect = {
-    //     // its bounding box
-    //     let mut rect = ui_square.clone();
-    //     let quarter = ui_square.width() / 4;
-    //     rect.resize(
-    //         quarter, // quarter of full width/height
-    //         quarter,
-    //     );
-    //     rect.offset((quarter * 3) as _, 0);
-
-    //     // 3/4s of the above bounding box
-    //     let inner_dim = rect.width() * 3 / 4;
-    //     let mut inner = rect.clone();
-    //     inner.resize(
-    //         inner_dim as _, // 3/4ths of full height/width
-    //         inner_dim,
-    //     );
-    //     inner.center_on(rect.center());
-
-    //     inner
-    // };
 
     // top right container for coming up tetrimino
     let up_next1 = ui_square1
@@ -264,53 +224,9 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         .sub_rect((7.0 / 8.0, 7.0 / 8.0), None); // inside the top right container
 
     // top left container for hold tetrimino
-    // let hold: Rect = {
-    //     // its bounding box
-    //     let mut rect = ui_square.clone();
-    //     let quarter = ui_square.width() / 4;
-    //     rect.resize(
-    //         quarter, // quarter of full width/height
-    //         quarter,
-    //     );
-
-    //     // 3/4s of the above bounding box
-    //     let inner_dim = rect.width() * 3 / 4;
-    //     let mut inner = rect.clone();
-    //     inner.resize(
-    //         inner_dim, // 3/4ths of full height/width
-    //         inner_dim,
-    //     );
-    //     inner.center_on(rect.center());
-
-    //     inner
-    // };
-
-    // top left container for hold tetrimino
     let hold1 = ui_square1
         .sub_rect((0.25, 0.25), Some((Align::Near, Align::Near)))
         .sub_rect((0.75, 0.75), None);
-
-    // bottom left where next tetriminos are displayed
-    // let queue: Rect = {
-    //     // its bounding box
-    //     let mut rect = ui_square.clone();
-    //     let quarter = ui_square.width() / 4;
-    //     rect.resize(
-    //         quarter, // quarter of full width/height
-    //         3 * quarter,
-    //     );
-    //     rect.offset((3 * quarter) as _, quarter as _);
-
-    //     // 5/8s of the above bounding box
-    //     let inner_width = rect.width() * 5 / 8;
-    //     let inner_height = rect.height() * 23 / 24;
-    //     let mut inner = rect.clone();
-    //     inner.resize(inner_width, inner_height);
-    //     inner.center_on(rect.center());
-    //     inner.set_y(rect.top());
-
-    //     inner
-    // };
 
     // bottom left where next tetriminos are displayed
     let queue1 = ui_square1
@@ -318,39 +234,11 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         .sub_rect((5.0 / 8.0, 23.0 / 24.0), Some((Align::Center, Align::Near)));
 
     // bottom left score box
-    // let score: Rect = {
-    //     // its bounding box
-    //     let mut rect = ui_square.clone();
-    //     let half = ui_square.width() / 2;
-    //     let quarter = ui_square.width() / 4;
-    //     let sixteenth = half / 8;
-    //     rect.resize(
-    //         quarter, // quarter of full width/height
-    //         2 * quarter,
-    //     );
-    //     rect.offset(0, 5 * sixteenth as i32);
-
-    //     // 5/8s of the above bounding box
-    //     let mut inner = rect.clone();
-    //     let inner_width = rect.width() * 7 / 8;
-    //     inner.set_width(inner_width);
-    //     inner.center_on(rect.center());
-    //     inner.set_y(rect.top());
-
-    //     inner
-    // };
-
-    // bottom left score box
     let score1 = ui_square1
         .sub_rect((0.25, 11.0 / 16.0), Some((Align::Near, Align::Far)))
         .sub_rect((7.0 / 8.0, 8.0 / 11.0), Some((Align::Center, Align::Near)));
 
     canvas.set_draw_color(MATRIX_COLOR);
-    // canvas.fill_rect(matrix).unwrap();
-    // canvas.fill_rect(up_next).unwrap();
-    // canvas.fill_rect(hold).unwrap();
-    // canvas.fill_rect(queue).unwrap();
-    // canvas.fill_rect(score).unwrap();
 
     for subrect in [&matrix1, &up_next1, &hold1, &queue1, &score1] {
         canvas.fill_rect(Rect::from(subrect)).unwrap();
@@ -368,7 +256,7 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
 
     if let Some((cursor_cells, cursor_color, _)) = engine.cursor_info() {
         for coord in cursor_cells {
-            cell_draw_ctx.draw_cell(coord, cursor_color);
+            cell_draw_ctx.draw_cell(coord, cursor_color, false);
         }
     }
 
@@ -390,10 +278,10 @@ impl CellDrawContext<'_> {
             return;
         };
 
-        self.draw_cell(coord, color)
+        self.draw_cell(coord, color, false)
     }
 
-    fn draw_cell(&mut self, coord: Coordinate, cell_color: TetriminoColor) {
+    fn draw_cell(&mut self, coord: Coordinate, cell_color: TetriminoColor, empty: bool) {
         // // we get the width from the next cells coordinates because otherwise we end up with a rounding error
         // let this_x = (coord.x as u32 + 0) * matrix_width / Matrix::WIDTH as u32;
         // let this_y = (coord.y as u32 + 1) * matrix_height / Matrix::HEIGHT as u32;
@@ -414,11 +302,13 @@ impl CellDrawContext<'_> {
         let cell_rect = Rect::new(
             self.origin.x + this.x as i32,
             self.origin.y - this.y as i32, // we subtract so we go up instead of down since origin is top left for the draw matrix (we also add one since the rect is drawn in the opposite direction)
-            next.x - this.x,               // next x is "to the right"
-            this.y - next.y,               // prev_y is "higher"
+            next.x - this.x + 1, // next x is "to the right", -1 to make the borders overlap
+            this.y - next.y + 1, // prev_y is "higher", -1 to make the borders overlap
         );
 
         self.canvas.set_draw_color(cell_color.screen_color());
         self.canvas.fill_rect(cell_rect).unwrap();
+        self.canvas.set_draw_color(Color::WHITE);
+        self.canvas.draw_rect(cell_rect).unwrap();
     }
 }
