@@ -1,8 +1,8 @@
-use core::range::Range;
 use std::ops::{Index, IndexMut};
 use std::time::Duration;
 
 use cgmath::{EuclideanSpace, Point2, Vector2};
+use color::TetriminoColor;
 use geometry::GridIncrement;
 use piece::{Piece, Rotation};
 use piece_kind::PieceKind;
@@ -11,6 +11,7 @@ use rand::rngs::ThreadRng;
 use rand::thread_rng;
 use std::slice::ArrayChunks;
 
+pub mod color;
 mod geometry;
 pub mod piece;
 mod piece_kind;
@@ -112,7 +113,6 @@ impl Engine {
 
         // check if it is not within moveable bounds (or above)
         if self.matrix.is_clipping(&new) {
-            // TODO: check
             return Err(());
         }
 
@@ -128,7 +128,9 @@ impl Engine {
         cursor.rotation = kind;
     }
 
-    pub fn cursor_info(&self) -> Option<([Coordinate; Piece::CELL_COUNT], Color, Rotation)> {
+    pub fn cursor_info(
+        &self,
+    ) -> Option<([Coordinate; Piece::CELL_COUNT], TetriminoColor, Rotation)> {
         let cursor = self.cursor?; // early return a None if it was None
         Some((
             cursor.cells().unwrap(),
@@ -142,15 +144,6 @@ impl Engine {
         let cursor = self.cursor?; // early return a None if it was None
 
         Some(cursor.rotation.next_rotation())
-    }
-
-    pub fn DEBUG_test_cursor_local(&mut self, kind: PieceKind, position: Offset) {
-        let piece = Piece {
-            kind,
-            rotation: Rotation::N,
-            position,
-        };
-        self.cursor = Some(piece)
     }
 
     // creates a random tetrimino and places it above the matrix
@@ -187,9 +180,6 @@ impl Engine {
     pub fn cursor_has_hit_bottom(&self) -> bool {
         self.cursor.is_some() && self.ticked_down_cursor().is_none()
     }
-
-    // // whether the cursor is at the bottom
-    // pub fn is_lock_down(&self) -> bool {}
 
     // get the new cursor if it was ticked down
     pub fn ticked_down_cursor(&self) -> Option<Piece> {
@@ -242,18 +232,8 @@ impl Engine {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Color {
-    Yellow,
-    Cyan,
-    Purple,
-    Orange,
-    Blue,
-    Green,
-    Red,
-}
 // represents the tetris matrix
-pub struct Matrix([Option<Color>; Self::SIZE]);
+pub struct Matrix([Option<TetriminoColor>; Self::SIZE]);
 
 // zero is at bottom left
 impl Matrix {
@@ -335,7 +315,7 @@ impl Matrix {
     }
 
     // returns an iterator of the slices of the lines
-    fn lines(&self) -> ArrayChunks<'_, Option<Color>, { Self::WIDTH }> {
+    fn lines(&self) -> ArrayChunks<'_, Option<TetriminoColor>, { Self::WIDTH }> {
         self.0.array_chunks()
     }
 
@@ -350,7 +330,7 @@ impl Matrix {
 
 // implement index trait so we can index it like an array
 impl Index<Coordinate> for Matrix {
-    type Output = Option<Color>;
+    type Output = Option<TetriminoColor>;
 
     fn index(&self, coord: Coordinate) -> &Self::Output {
         assert!(Self::on_matrix(coord));
@@ -370,11 +350,11 @@ impl IndexMut<Coordinate> for Matrix {
 pub struct CellIter<'matrix> {
     position: Coordinate, // starts at the bottom and goes up, tracks where we are in the iteration
     // we introduce a new lifetime, because we're acessing memory of matrix with &Option<Color>
-    cells: ::std::slice::Iter<'matrix, Option<Color>>,
+    cells: ::std::slice::Iter<'matrix, Option<TetriminoColor>>,
 }
 
 impl<'matrix> Iterator for CellIter<'matrix> {
-    type Item = (Coordinate, Option<Color>);
+    type Item = (Coordinate, Option<TetriminoColor>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let Some(&cell) = self.cells.next() else {
@@ -398,8 +378,8 @@ mod test {
     #[test]
     fn cell_iter() {
         let mut matrix = Matrix::blank();
-        matrix[Coordinate::new(2, 0)] = Some(Color::Blue);
-        matrix[Coordinate::new(3, 1)] = Some(Color::Green);
+        matrix[Coordinate::new(2, 0)] = Some(TetriminoColor::Blue);
+        matrix[Coordinate::new(3, 1)] = Some(TetriminoColor::Green);
 
         let mut iter = CellIter {
             position: Coordinate::origin(),
@@ -412,7 +392,7 @@ mod test {
             [
                 (Coordinate::new(0, 0), None),
                 (Coordinate::new(1, 0), None),
-                (Coordinate::new(2, 0), Some(Color::Blue)),
+                (Coordinate::new(2, 0), Some(TetriminoColor::Blue)),
                 (Coordinate::new(3, 0), None),
                 (Coordinate::new(4, 0), None)
             ]
@@ -421,7 +401,7 @@ mod test {
         let other_item = (&mut iter).skip(8).next();
         assert_eq!(
             other_item,
-            Some((Coordinate::new(3, 1), Some(Color::Green)))
+            Some((Coordinate::new(3, 1), Some(TetriminoColor::Green)))
         );
 
         assert!(iter.all(|(_, contents)| contents.is_none()));

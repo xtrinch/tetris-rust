@@ -1,5 +1,5 @@
+use crate::engine::color::TetriminoColor;
 use crate::engine::piece::Rotation;
-use crate::engine::Color as SemanticColor;
 use crate::engine::MoveKind;
 use crate::engine::{Coordinate, Engine, Matrix};
 use crate::interface::render_traits::ScreenColor;
@@ -81,6 +81,8 @@ impl Interface {
         let mut timer;
         let mut lock_down: bool = false;
 
+        engine.create_top_cursor();
+
         loop {
             for event in events.poll_iter() {
                 // match dbg!(event) {
@@ -96,9 +98,6 @@ impl Interface {
                             if has_hit_bottom {
                                 event_subsystem.push_custom_event(LockdownTick).unwrap();
                             }
-                        } else {
-                            // if we don't have a cursor, create one
-                            engine.create_top_cursor();
                         }
 
                         timer = timer_subsystem.add_timer(
@@ -152,11 +151,6 @@ impl Interface {
             }
             dirty = false;
         }
-
-        let interface = Self { engine };
-
-        drop(interface);
-        todo!("Run the game");
     }
 }
 
@@ -390,7 +384,7 @@ struct CellDrawContext<'canvas> {
 impl CellDrawContext<'_> {
     const CELL_COUNT: Vector2<u32> = Vector2::new(Matrix::WIDTH as u32, Matrix::HEIGHT as u32);
 
-    fn try_draw_cell(&mut self, coord: Coordinate, cell: Option<SemanticColor>) {
+    fn try_draw_cell(&mut self, coord: Coordinate, cell: Option<TetriminoColor>) {
         let Some(color) = cell else {
             return;
         };
@@ -398,7 +392,7 @@ impl CellDrawContext<'_> {
         self.draw_cell(coord, color)
     }
 
-    fn draw_cell(&mut self, coord: Coordinate, cell_color: SemanticColor) {
+    fn draw_cell(&mut self, coord: Coordinate, cell_color: TetriminoColor) {
         // // we get the width from the next cells coordinates because otherwise we end up with a rounding error
         // let this_x = (coord.x as u32 + 0) * matrix_width / Matrix::WIDTH as u32;
         // let this_y = (coord.y as u32 + 1) * matrix_height / Matrix::HEIGHT as u32;

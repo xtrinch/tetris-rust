@@ -1,6 +1,6 @@
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 
-use super::{piece::Piece, Color, Offset};
+use super::{color::TetriminoColor, piece::Piece, Offset};
 
 // derive traits
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -51,15 +51,15 @@ impl PieceKind {
         }
     }
 
-    pub fn color(&self) -> Color {
+    pub fn color(&self) -> TetriminoColor {
         match self {
-            Self::O => Color::Yellow,
-            Self::I => Color::Cyan,
-            Self::T => Color::Purple,
-            Self::L => Color::Orange,
-            Self::J => Color::Blue,
-            Self::S => Color::Green,
-            Self::Z => Color::Red,
+            Self::O => TetriminoColor::Yellow,
+            Self::I => TetriminoColor::Cyan,
+            Self::T => TetriminoColor::Purple,
+            Self::L => TetriminoColor::Orange,
+            Self::J => TetriminoColor::Blue,
+            Self::S => TetriminoColor::Green,
+            Self::Z => TetriminoColor::Red,
         }
     }
 }
