@@ -4,8 +4,9 @@ use cgmath::{EuclideanSpace, Point2, Vector2};
 use color::TetriminoColor;
 use matrix::{CellIter, Matrix};
 use move_kind::MoveKind;
-use piece::{Piece, Rotation};
+use piece::Piece;
 use piece_kind::PieceKind;
+use piece_rotation::Rotation;
 use rand::prelude::SliceRandom;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
@@ -16,6 +17,7 @@ pub mod matrix;
 pub mod move_kind;
 pub mod piece;
 mod piece_kind;
+pub mod piece_rotation;
 
 pub type Coordinate = Point2<usize>;
 type Offset = Vector2<isize>;
@@ -43,8 +45,8 @@ impl Engine {
     pub const MATRIX_WIDTH: usize = 10; // matrix 10 cells wide
     pub const MATRIX_HEIGHT: usize = 20; // matrix 20 cells high
 
-    pub const UP_NEXT_MATRIX_WIDTH: usize = 4; // matrix 10 cells wide
-    pub const UP_NEXT_MATRIX_HEIGHT: usize = 4; // matrix 20 cells high
+    pub const UP_NEXT_MATRIX_WIDTH: usize = 5;
+    pub const UP_NEXT_MATRIX_HEIGHT: usize = 5;
 
     pub fn new() -> Self {
         let mut rng = thread_rng();
@@ -174,6 +176,7 @@ impl Engine {
         self.next_matrix.clear();
         // place all of the squares of the piece into the matrix
         for coord in piece.cells().unwrap() {
+            dbg!(coord);
             self.next_matrix[coord] = Some(piece.kind.color());
         }
 
@@ -273,7 +276,6 @@ impl Engine {
         }
     }
 
-    // TODO: this and the function above can be combined
     // get an iterator for the cells of the matrix
     pub fn cells_up_next(
         &self,

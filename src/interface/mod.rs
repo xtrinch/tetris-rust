@@ -1,7 +1,7 @@
 use crate::engine::color::TetriminoColor;
 use crate::engine::matrix::Matrix;
 use crate::engine::move_kind::MoveKind;
-use crate::engine::piece::Rotation;
+use crate::engine::piece_rotation::Rotation;
 use crate::engine::{Coordinate, Engine};
 use crate::interface::render_traits::ScreenColor;
 use cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
@@ -254,7 +254,6 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         canvas.fill_rect(Rect::from(subrect)).unwrap();
     }
 
-    // TODO: const to params
     let mut cell_draw_ctx: CellDrawContext<
         { Engine::MATRIX_WIDTH },
         { Engine::MATRIX_HEIGHT },
@@ -294,6 +293,8 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     }
 
     for (coord, cell) in engine.cells_up_next() {
+        // dbg!(coord);
+
         up_next_cell_draw_ctx.try_draw_cell(coord, cell);
     }
 
