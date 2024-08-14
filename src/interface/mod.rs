@@ -1,5 +1,5 @@
 use crate::engine::color::TetriminoColor;
-use crate::engine::matrix::Matrix;
+use crate::engine::matrix::{CellIter, Matrix};
 use crate::engine::move_kind::MoveKind;
 use crate::engine::piece_rotation::Rotation;
 use crate::engine::{Coordinate, Engine};
@@ -7,6 +7,7 @@ use crate::interface::render_traits::ScreenColor;
 use cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
 use sdl2::keyboard::Keycode;
 use sdl2::{event::Event, pixels::Color, rect::Rect, render::Canvas, video::Window};
+use std::cell;
 use std::time::Duration;
 use sub_rect::{Align, SubRect};
 
@@ -82,8 +83,9 @@ impl Interface {
         let mut timer;
         let mut lock_down: bool = false;
         let mut paused = false;
+        let mut hold_lock: bool = false;
 
-        engine.create_top_cursor();
+        engine.create_top_cursor(None);
 
         loop {
             for event in events.poll_iter() {
@@ -120,7 +122,7 @@ impl Interface {
                         println!("Found lockdown tick event");
                         // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
                         engine.place_cursor();
-                        engine.create_top_cursor();
+                        engine.create_top_cursor(None);
 
                         dirty = true;
                         lock_down = true
@@ -135,13 +137,21 @@ impl Interface {
                                 Input::Move(kind) => drop(engine.move_cursor(kind)),
                                 Input::HardDrop => {
                                     engine.hard_drop(); // hard drop
-                                    engine.create_top_cursor();
+                                    engine.create_top_cursor(None);
                                     lock_down = true
                                 }
                                 Input::SoftDrop => println!("Soft drop tick"),
                                 Input::Rotation(kind) => engine.rotate_cursor(kind),
                                 Input::Pause => {
                                     paused = !paused;
+                                }
+                                Input::Hold => {
+                                    if !hold_lock {
+                                        println!("HOLD LOCK IS FALSE");
+                                        engine.try_hold();
+                                    }
+                                    hold_lock = true;
+                                    println!("HOLD LOCK IS GTRUE")
                                 }
                             }
                             dirty = true
@@ -153,7 +163,10 @@ impl Interface {
 
             // scan the board, see what lines need to be cleared
             if lock_down {
+                println!("IS LOCK DOWN");
                 engine.line_clear(|indices| ());
+                hold_lock = false;
+                lock_down = false;
             }
             if dirty {
                 draw(&mut canvas, &engine);
@@ -170,6 +183,7 @@ enum Input {
     SoftDrop,
     HardDrop,
     Pause,
+    Hold,
 }
 
 // map various keyboard keys to actions within the game
@@ -188,6 +202,7 @@ impl Input {
             Keycode::Down => Self::SoftDrop,
             Keycode::Space => Self::HardDrop,
             Keycode::NUM_1 => Self::Pause,
+            Keycode::C => Self::Hold,
             _ => return Err(()),
         })
     }
@@ -204,23 +219,24 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     // the system is based upon first positioning the container, then an inner rect relative to id
 
     // the square into which we draw and the margin which can be either on the left/right or top/bottom (because the window is resizable)
-    let ui_square = {
-        let Vector2 { x, y } = Vector2::from(viewport.size()).cast::<i32>().unwrap();
+    // let ui_square = {
+    //     let Vector2 { x, y } = Vector2::from(viewport.size()).cast::<i32>().unwrap();
 
-        if x > y {
-            // landscape, we have top and bottom black margins
-            let midpoint = x / 2;
-            let left_edge = midpoint - (y / 2);
-            Rect::new(left_edge, 0, y as u32, y as u32)
-        } else {
-            // portrait, we have left and right black margins
-            let midpoint = y / 2;
-            let top_edge = midpoint - (x / 2);
-            Rect::new(0, top_edge, x as u32, x as u32)
-        }
-    };
+    //     if x > y {
+    //         // landscape, we have top and bottom black margins
+    //         let midpoint = x / 2;
+    //         let left_edge = midpoint - (y / 2);
+    //         Rect::new(left_edge, 0, y as u32, y as u32)
+    //     } else {
+    //         // portrait, we have left and right black margins
+    //         let midpoint = y / 2;
+    //         let top_edge = midpoint - (x / 2);
+    //         Rect::new(0, top_edge, x as u32, x as u32)
+    //     }
+    // };
     // canvas.draw_rect(ui_square).unwrap();
 
+    // the square into which we draw and the margin which can be either on the left/right or top/bottom (because the window is resizable)
     let ui_square1 = SubRect::absolute(viewport, (1.0, 1.0), None);
     // canvas.draw_rect(Rect::from(ui_square1)).unwrap();
 
@@ -236,12 +252,15 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     // top left container for hold tetrimino
     let hold1 = ui_square1
         .sub_rect((0.25, 0.25), Some((Align::Near, Align::Near)))
-        .sub_rect((0.75, 0.75), None);
+        .sub_rect((0.64, 0.64), None);
 
-    // bottom left where next tetriminos are displayed
+    // bottom right where next tetriminos are displayed
     let queue1 = ui_square1
         .sub_rect((0.25, 0.75), Some((Align::Far, Align::Far)))
-        .sub_rect((5.0 / 8.0, 23.0 / 24.0), Some((Align::Center, Align::Near)));
+        .sub_rect(
+            (5.0 / 10.0, 23.0 / 24.0),
+            Some((Align::Center, Align::Near)),
+        );
 
     // bottom left score box
     let score1 = ui_square1
@@ -254,23 +273,15 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         canvas.fill_rect(Rect::from(subrect)).unwrap();
     }
 
-    let mut cell_draw_ctx: CellDrawContext<
-        { Engine::MATRIX_WIDTH },
-        { Engine::MATRIX_HEIGHT },
-        { Engine::MATRIX_HEIGHT * Engine::MATRIX_WIDTH },
-    > = CellDrawContext {
-        origin: matrix1.bottom_left(),
-        dims: Vector2::from(matrix1.size()),
-        canvas,
-    };
+    let mut cell_draw_ctx: CellDrawContext<{ Engine::MATRIX_WIDTH }, { Engine::MATRIX_HEIGHT }> =
+        CellDrawContext {
+            origin: matrix1.bottom_left(),
+            dims: Vector2::from(matrix1.size()),
+            canvas,
+            matrix: &engine.matrix, // TODO: figure our how to pass the iter instead of the whole matrix
+        };
 
-    for (coord, _) in engine.cells() {
-        cell_draw_ctx.draw_border(coord);
-    }
-
-    for (coord, cell) in engine.cells() {
-        cell_draw_ctx.try_draw_cell(coord, cell);
-    }
+    cell_draw_ctx.draw_matrix();
 
     if let Some((cursor_cells, cursor_color, _)) = engine.cursor_info() {
         for coord in cursor_cells {
@@ -279,39 +290,80 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     }
 
     let mut up_next_cell_draw_ctx: CellDrawContext<
-        { Engine::UP_NEXT_MATRIX_WIDTH },
-        { Engine::UP_NEXT_MATRIX_HEIGHT },
-        { Engine::UP_NEXT_MATRIX_HEIGHT * Engine::UP_NEXT_MATRIX_WIDTH },
+        { Engine::SINGLE_TETRIMINO_MATRIX_WIDTH },
+        { Engine::SINGLE_TETRIMINO_MATRIX_HEIGHT },
     > = CellDrawContext {
         origin: up_next1.bottom_left(),
         dims: Vector2::from(up_next1.size()),
         canvas,
+        matrix: &engine.up_next_matrix,
     };
 
-    for (coord, _) in engine.cells_up_next() {
-        up_next_cell_draw_ctx.draw_border(coord);
-    }
+    up_next_cell_draw_ctx.draw_matrix();
 
-    for (coord, cell) in engine.cells_up_next() {
-        // dbg!(coord);
+    let mut remaining_next_cell_draw_ctx: CellDrawContext<
+        { Engine::REMAINING_NEXT_MATRIX_WIDTH },
+        { Engine::REMAINING_NEXT_MATRIX_HEIGHT },
+    > = CellDrawContext {
+        origin: queue1.bottom_left(),
+        dims: Vector2::from(queue1.size()),
+        canvas,
+        matrix: &engine.queue_matrix,
+    };
 
-        up_next_cell_draw_ctx.try_draw_cell(coord, cell);
-    }
+    remaining_next_cell_draw_ctx.draw_matrix();
+
+    let mut hold_cell_draw_ctx: CellDrawContext<
+        { Engine::SINGLE_TETRIMINO_MATRIX_WIDTH },
+        { Engine::SINGLE_TETRIMINO_MATRIX_HEIGHT },
+    > = CellDrawContext {
+        origin: hold1.bottom_left(),
+        dims: Vector2::from(hold1.size()),
+        canvas,
+        matrix: &engine.hold_matrix,
+    };
+
+    hold_cell_draw_ctx.draw_matrix();
 
     canvas.present();
 }
 
 // we need a lifetime because we have a mutable reference
-struct CellDrawContext<'canvas, const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> {
+struct CellDrawContext<'canvas, const WIDTH: usize, const HEIGHT: usize>
+where
+    [usize; WIDTH * HEIGHT]:,
+{
     origin: Point2<i32>,
     dims: Vector2<u32>,
     canvas: &'canvas mut Canvas<Window>,
+    matrix: &'canvas Matrix<WIDTH, HEIGHT>,
 }
 
-impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize>
-    CellDrawContext<'_, { WIDTH }, { HEIGHT }, { SIZE }>
+impl<const WIDTH: usize, const HEIGHT: usize> CellDrawContext<'_, { WIDTH }, { HEIGHT }>
+where
+    [usize; WIDTH * HEIGHT]:,
 {
     const CELL_COUNT: Vector2<u32> = Vector2::new(WIDTH as u32, HEIGHT as u32);
+
+    fn draw_matrix(&mut self) {
+        let cell_iter: CellIter<WIDTH, HEIGHT> = CellIter {
+            position: Coordinate::origin(),
+            cells: self.matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
+        };
+
+        for (coord, _) in cell_iter {
+            self.draw_border(coord);
+        }
+
+        let cell_iter1: CellIter<WIDTH, HEIGHT> = CellIter {
+            position: Coordinate::origin(),
+            cells: self.matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
+        };
+
+        for (coord, cell) in cell_iter1 {
+            self.try_draw_cell(coord, cell);
+        }
+    }
 
     fn get_rect(&mut self, coord: Coordinate) -> Rect {
         // // we get the width from the next cells coordinates because otherwise we end up with a rounding error

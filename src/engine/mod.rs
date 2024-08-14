@@ -24,11 +24,17 @@ type Offset = Vector2<isize>;
 
 // represents the game engine
 pub struct Engine {
-    matrix: Matrix<{ Self::MATRIX_WIDTH }, { Self::MATRIX_HEIGHT }>,
-    next_matrix: Matrix<{ Self::UP_NEXT_MATRIX_WIDTH }, { Self::UP_NEXT_MATRIX_HEIGHT }>,
+    pub matrix: Matrix<{ Self::MATRIX_WIDTH }, { Self::MATRIX_HEIGHT }>,
+    pub up_next_matrix:
+        Matrix<{ Self::SINGLE_TETRIMINO_MATRIX_WIDTH }, { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT }>,
+    pub hold_matrix:
+        Matrix<{ Self::SINGLE_TETRIMINO_MATRIX_WIDTH }, { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT }>,
+    pub queue_matrix:
+        Matrix<{ Self::REMAINING_NEXT_MATRIX_WIDTH }, { Self::REMAINING_NEXT_MATRIX_HEIGHT }>,
     next: Vec<PieceKind>, // next up, these are also visible on the screen (7), they are filled from the bag or randomly
     bag: Vec<PieceKind>, // this is from where tetris piece types are taken from during gameplay (7 are shuffled, taken out one by one, then process repeats)
-    rng: ThreadRng,      // random number generator instance
+    hold: Option<PieceKind>,
+    rng: ThreadRng,        // random number generator instance
     cursor: Option<Piece>, // current active piece (the one falling down), optional
     level: u8,
 }
@@ -37,8 +43,11 @@ impl Engine {
     pub const MATRIX_WIDTH: usize = 10; // matrix 10 cells wide
     pub const MATRIX_HEIGHT: usize = 20; // matrix 20 cells high
 
-    pub const UP_NEXT_MATRIX_WIDTH: usize = 4;
-    pub const UP_NEXT_MATRIX_HEIGHT: usize = 4;
+    pub const SINGLE_TETRIMINO_MATRIX_WIDTH: usize = 4;
+    pub const SINGLE_TETRIMINO_MATRIX_HEIGHT: usize = 4;
+
+    pub const REMAINING_NEXT_MATRIX_WIDTH: usize = 4;
+    pub const REMAINING_NEXT_MATRIX_HEIGHT: usize = 6 * 4; // 6 of the 7 items in next vector; TODO: from constant
 
     pub fn new() -> Self {
         let mut rng = thread_rng();
@@ -47,12 +56,23 @@ impl Engine {
 
         Engine {
             matrix: Matrix::<{ Self::MATRIX_WIDTH }, { Self::MATRIX_HEIGHT }>::blank(),
-            next_matrix:
-                Matrix::<{ Self::UP_NEXT_MATRIX_WIDTH }, { Self::UP_NEXT_MATRIX_HEIGHT }>::blank(),
+            up_next_matrix: Matrix::<
+                { Self::SINGLE_TETRIMINO_MATRIX_WIDTH },
+                { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT },
+            >::blank(),
+            hold_matrix: Matrix::<
+                { Self::SINGLE_TETRIMINO_MATRIX_WIDTH },
+                { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT },
+            >::blank(),
+            queue_matrix: Matrix::<
+                { Self::REMAINING_NEXT_MATRIX_WIDTH },
+                { Self::REMAINING_NEXT_MATRIX_HEIGHT },
+            >::blank(),
             bag: Vec::new(),
             next: up_next,
             rng: rng,
             cursor: None,
+            hold: None,
             level: 1,
         }
     }
@@ -80,14 +100,7 @@ impl Engine {
             cursor
         );
 
-        let color = cursor.kind.color();
-        // place all of the squares of the piece into the matrix
-        for coord in cursor.cells().unwrap() {
-            self.matrix[coord] = Some(color);
-        }
-
-        // self.cursor = None // reset the cursor since we've placed it
-        // self.create_top_cursor();
+        self.matrix.place_piece(cursor);
     }
 
     // place the cursor into the matrix onto the position it's currently at
@@ -127,7 +140,7 @@ impl Engine {
     pub fn cursor_info(
         &self,
     ) -> Option<([Coordinate; Piece::CELL_COUNT], TetriminoColor, Rotation)> {
-        let cursor = self.cursor?; // early return a None if it was None
+        let cursor: Piece = self.cursor?; // early return a None if it was None
         Some((
             cursor.cells().unwrap(),
             cursor.kind.color(),
@@ -143,27 +156,45 @@ impl Engine {
     }
 
     // creates a random tetrimino and places it above the matrix
-    pub fn create_top_cursor(&mut self) {
-        let kind = self.next.remove(0);
+    pub fn create_top_cursor(&mut self, force_kind: Option<PieceKind>) {
+        let kind: PieceKind;
+        if force_kind.is_some() {
+            kind = force_kind.unwrap();
+        } else {
+            kind = self.next.remove(0);
 
-        // TODO: prettify
-        // add a new one since we removed one
-        let new_tetrimino: PieceKind = rand::random(); // we can do this because we implemented the distribution trait for this enum!
-        self.next.push(new_tetrimino);
+            // TODO: prettify
+            // add a new one since we removed one
+            let new_tetrimino: PieceKind = rand::random(); // we can do this because we implemented the distribution trait for this enum!
+            self.next.push(new_tetrimino);
 
-        // readd cells in up next matrix
-        let next_up = *self.next.get(0).unwrap();
-        let piece = Piece {
-            kind: next_up,
-            position: (0, 0).into(),
-            rotation: Rotation::N,
-        };
-        self.next_matrix.clear();
-        // place all of the squares of the piece into the matrix
-        for coord in piece.cells().unwrap() {
-            self.next_matrix[coord] = Some(piece.kind.color());
+            // readd cells in up next matrix
+            self.up_next_matrix.clear();
+            self.queue_matrix.clear();
+
+            for (index, next_up) in self.next.iter().rev().enumerate() {
+                let mut piece = Piece {
+                    kind: *next_up,
+                    position: (0, 0).into(),
+                    rotation: Rotation::N,
+                };
+
+                // the up next tetrimino
+                if index == self.next.len() - 1 {
+                    self.up_next_matrix.place_piece(piece);
+                } else {
+                    // the queue tetriminos
+                    let inside_index = index;
+                    piece.position = (0, ((inside_index) * 4) as isize).into();
+
+                    for coord in piece.cells().unwrap() {
+                        // TODO: some constants
+                        // add to y so we get a top-to-bottom queue
+                        self.queue_matrix[(coord.x, coord.y).into()] = Some(piece.kind.color());
+                    }
+                }
+            }
         }
-
         // tetriminos are all generated north facing (just as they appear in the next Queue)
         let rotation = Rotation::N;
 
@@ -244,6 +275,27 @@ impl Engine {
         self.try_place_cursor();
     }
 
+    pub fn try_hold(&mut self) -> Option<bool> {
+        let mut cursor: Piece = self.cursor?; // early return a None if it was None
+
+        // if we don't have a hold or the hold is not the same as the current cursor
+        if self.hold.is_none() || (self.hold.is_some() && self.hold.unwrap() != cursor.kind) {
+            self.hold_matrix.clear();
+
+            let old_hold = self.hold;
+            self.hold = Some(cursor.kind);
+            cursor.position = (0, 0).into(); // TODO: make sure this doesn't do phantom draws of cursor at 0,0
+            self.hold_matrix.place_piece(cursor);
+
+            self.cursor = None;
+
+            // create top cursor from whatever was on hold if there was anything
+            self.create_top_cursor(old_hold);
+        }
+
+        return Some(true);
+    }
+
     // get an iterator for the cells of the matrix
     pub fn cells(&self) -> CellIter<'_, { Self::MATRIX_WIDTH }, { Self::MATRIX_HEIGHT }> {
         // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
@@ -256,11 +308,43 @@ impl Engine {
     // get an iterator for the cells of the matrix
     pub fn cells_up_next(
         &self,
-    ) -> CellIter<'_, { Self::UP_NEXT_MATRIX_WIDTH }, { Self::UP_NEXT_MATRIX_HEIGHT }> {
+    ) -> CellIter<
+        '_,
+        { Self::SINGLE_TETRIMINO_MATRIX_WIDTH },
+        { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT },
+    > {
         // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
         CellIter {
             position: Coordinate::origin(),
-            cells: self.next_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
+            cells: self.up_next_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
+        }
+    }
+
+    // get an iterator for the cells of the matrix
+    pub fn cells_hold(
+        &self,
+    ) -> CellIter<
+        '_,
+        { Self::SINGLE_TETRIMINO_MATRIX_WIDTH },
+        { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT },
+    > {
+        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
+        CellIter {
+            position: Coordinate::origin(),
+            cells: self.hold_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
+        }
+    }
+
+    // TODO: cleanup, do we even need this methd
+    // get an iterator for the cells of the matrix
+    pub fn cells_remaining_next(
+        &self,
+    ) -> CellIter<'_, { Self::REMAINING_NEXT_MATRIX_WIDTH }, { Self::REMAINING_NEXT_MATRIX_HEIGHT }>
+    {
+        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
+        CellIter {
+            position: Coordinate::origin(),
+            cells: self.queue_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
         }
     }
 

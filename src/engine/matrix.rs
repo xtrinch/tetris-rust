@@ -111,6 +111,15 @@ where
     pub fn clear(&mut self) {
         self.matrix[0..].fill(None)
     }
+
+    // place all of the squares of the piece into the matrix
+    pub fn place_piece(&mut self, piece: Piece) {
+        let color: TetriminoColor = piece.kind.color();
+
+        for coord in piece.cells().unwrap() {
+            self[coord] = Some(color);
+        }
+    }
 }
 
 // implement index trait so we can index it like an array
