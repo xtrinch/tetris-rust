@@ -33,7 +33,7 @@ impl PieceKind {
     pub fn cells(&self, // shared reference to self
     ) -> [Offset; Piece::CELL_COUNT] {
         match self {
-            Self::O => &[(0, 0), (0, 1), (1, 0), (1, 1)],
+            Self::O => &[(1, 1), (1, 2), (2, 1), (2, 2)],
             Self::I => &[(0, 2), (1, 2), (2, 2), (3, 2)],
             Self::T => &[(0, 1), (1, 1), (2, 1), (1, 2)],
             Self::L => &[(0, 1), (1, 1), (2, 1), (2, 2)],
@@ -63,7 +63,6 @@ impl PieceKind {
         }
     }
 
-    // TODO: yellow starts one too low
     pub fn north_height(&self) -> u8 {
         match self {
             PieceKind::J => 2,
@@ -82,7 +81,7 @@ impl PieceKind {
             PieceKind::J => 3,
             PieceKind::I => 4,
             PieceKind::L => 3,
-            PieceKind::O => 2,
+            PieceKind::O => 3,
             PieceKind::S => 3,
             PieceKind::T => 3,
             PieceKind::Z => 3,

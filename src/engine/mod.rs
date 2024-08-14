@@ -45,8 +45,8 @@ impl Engine {
     pub const MATRIX_WIDTH: usize = 10; // matrix 10 cells wide
     pub const MATRIX_HEIGHT: usize = 20; // matrix 20 cells high
 
-    pub const UP_NEXT_MATRIX_WIDTH: usize = 5;
-    pub const UP_NEXT_MATRIX_HEIGHT: usize = 5;
+    pub const UP_NEXT_MATRIX_WIDTH: usize = 4;
+    pub const UP_NEXT_MATRIX_HEIGHT: usize = 4;
 
     pub fn new() -> Self {
         let mut rng = thread_rng();
@@ -176,7 +176,6 @@ impl Engine {
         self.next_matrix.clear();
         // place all of the squares of the piece into the matrix
         for coord in piece.cells().unwrap() {
-            dbg!(coord);
             self.next_matrix[coord] = Some(piece.kind.color());
         }
 
