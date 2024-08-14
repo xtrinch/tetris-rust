@@ -70,19 +70,6 @@ impl Engine {
         }
     }
 
-    pub fn with_matrix(
-        matrix: Matrix<
-            { Self::MATRIX_WIDTH },
-            { Self::MATRIX_HEIGHT },
-            { Self::MATRIX_WIDTH * Self::MATRIX_HEIGHT },
-        >,
-    ) -> Self {
-        Self {
-            matrix,
-            ..Self::new()
-        }
-    }
-
     // once bag where we pick new pieces from is empty, we need to refill it
     fn refill_bag(&mut self, // mutable reference to self because we are modifying ourselves
     ) {
@@ -154,8 +141,6 @@ impl Engine {
         &self,
     ) -> Option<([Coordinate; Piece::CELL_COUNT], TetriminoColor, Rotation)> {
         let cursor = self.cursor?; // early return a None if it was None
-        dbg!(cursor);
-        dbg!(cursor.cells().unwrap());
         Some((
             cursor.cells().unwrap(),
             cursor.kind.color(),
@@ -172,7 +157,25 @@ impl Engine {
 
     // creates a random tetrimino and places it above the matrix
     pub fn create_top_cursor(&mut self) {
-        let kind: PieceKind = rand::random(); // we can do this because we implemented the distribution trait for this enum!
+        let kind = self.next.remove(0);
+
+        // TODO: prettify
+        // add a new one since we removed one
+        let new_tetrimino: PieceKind = rand::random(); // we can do this because we implemented the distribution trait for this enum!
+        self.next.push(new_tetrimino);
+
+        // readd cells in up next matrix
+        let next_up = *self.next.get(0).unwrap();
+        let piece = Piece {
+            kind: next_up,
+            position: (0, 0).into(),
+            rotation: Rotation::N,
+        };
+        self.next_matrix.clear();
+        // place all of the squares of the piece into the matrix
+        for coord in piece.cells().unwrap() {
+            self.next_matrix[coord] = Some(piece.kind.color());
+        }
 
         // tetriminos are all generated north facing (just as they appear in the next Queue)
         let rotation = Rotation::N;

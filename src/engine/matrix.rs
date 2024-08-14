@@ -99,6 +99,10 @@ impl<const WIDTH: usize, const HEIGHT: usize, const SIZE: usize> Matrix<WIDTH, H
             .map(|(i, _)| i) // take the indices
             .collect() // collect into the return type
     }
+
+    pub fn clear(&mut self) {
+        self.matrix[0..].fill(None)
+    }
 }
 
 // implement index trait so we can index it like an array

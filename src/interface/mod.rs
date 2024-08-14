@@ -265,7 +265,7 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         canvas,
     };
 
-    for (coord, cell) in engine.cells() {
+    for (coord, _) in engine.cells() {
         cell_draw_ctx.draw_border(coord);
     }
 
@@ -289,8 +289,12 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         canvas,
     };
 
-    for (coord, cell) in engine.cells_up_next() {
+    for (coord, _) in engine.cells_up_next() {
         up_next_cell_draw_ctx.draw_border(coord);
+    }
+
+    for (coord, cell) in engine.cells_up_next() {
+        up_next_cell_draw_ctx.try_draw_cell(coord, cell);
     }
 
     canvas.present();
