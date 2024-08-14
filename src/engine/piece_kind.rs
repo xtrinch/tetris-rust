@@ -33,7 +33,7 @@ impl PieceKind {
     pub fn cells(&self, // shared reference to self
     ) -> [Offset; Piece::CELL_COUNT] {
         match self {
-            Self::O => &[(1, 1), (1, 2), (2, 1), (2, 2)],
+            Self::O => &[(0, 0), (0, 1), (1, 0), (1, 1)],
             Self::I => &[(0, 2), (1, 2), (2, 2), (3, 2)],
             Self::T => &[(0, 1), (1, 1), (2, 1), (1, 2)],
             Self::L => &[(0, 1), (1, 1), (2, 1), (2, 2)],
@@ -60,6 +60,31 @@ impl PieceKind {
             Self::J => TetriminoColor::Blue,
             Self::S => TetriminoColor::Green,
             Self::Z => TetriminoColor::Red,
+        }
+    }
+
+    pub fn north_height(&self) -> u8 {
+        match self {
+            PieceKind::J => 2,
+            PieceKind::I => 1,
+            PieceKind::L => 2,
+            PieceKind::O => 2,
+            PieceKind::S => 2,
+            PieceKind::T => 2,
+            PieceKind::Z => 2,
+        }
+    }
+
+    pub fn north_width(&self) -> u8 {
+        // this includes the t-tetrimino, L-tetrimino, j-tetrimino, S-tetrimino and z-tetrimino.
+        match self {
+            PieceKind::J => 3,
+            PieceKind::I => 4,
+            PieceKind::L => 3,
+            PieceKind::O => 2,
+            PieceKind::S => 3,
+            PieceKind::T => 3,
+            PieceKind::Z => 3,
         }
     }
 }

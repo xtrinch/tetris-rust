@@ -136,8 +136,36 @@ impl Engine {
     pub fn create_top_cursor(&mut self) {
         let kind: PieceKind = rand::random(); // we can do this because we implemented the distribution trait for this enum!
 
+        // tetriminos are all generated north facing (just as they appear in the next Queue)
         let rotation = Rotation::N;
-        let position: Offset = (4, 19).into();
+
+        /*
+           tetriminos are generated on the 21st and 22nd rows
+           and every tetrimino that is three Minos wide is generated on the 4th cell across and stretches to the 6th.
+           this includes the t-tetrimino, L-tetrimino, j-tetrimino, S-tetrimino and z-tetrimino.
+           the I-tetrimino and o-tetrimino are exactly centered at generation.
+           the I-tetrimino is generated on the 21st row (not 22nd), stretching from the 4th to 7th cells.
+           the o-tetrimino is generated on the 5th and  6th cell.
+        */
+
+        let (mut x, mut y) = (0, 0);
+
+        // the I-tetrimino should start lower than the rest because of its north height being smaller
+        match kind.north_height() {
+            2 => y = 19,
+            1 => y = 18,
+            _ => y = 19,
+        }
+
+        // try to center them as best we can;
+        match kind.north_width() {
+            2 => x = 4,
+            3 => x = 3,
+            4 => x = 3,
+            _ => todo!(),
+        }
+
+        let position = (x, y).into();
 
         let piece = Piece {
             kind,
