@@ -109,15 +109,49 @@ impl Engine {
         Ok(())
     }
 
-    pub fn cursor_info(&self) -> Option<([Coordinate; Piece::CELL_COUNT], Color)> {
+    pub fn rotate_cursor(&mut self, kind: Rotation) -> () {
+        let Some(cursor) = self.cursor.as_mut() else {
+            return; // because it's OK to move a cursor that isn't there, it would just do nothing
+        };
+
+        cursor.rotation = kind;
+    }
+
+    pub fn cursor_info(&self) -> Option<([Coordinate; Piece::CELL_COUNT], Color, Rotation)> {
         let cursor = self.cursor?; // early return a None if it was None
-        Some((cursor.cells().unwrap(), cursor.kind.color()))
+        Some((
+            cursor.cells().unwrap(),
+            cursor.kind.color(),
+            cursor.rotation,
+        ))
+    }
+
+    // current cursor rotation
+    pub fn next_cursor_rotation(&self) -> Option<Rotation> {
+        let cursor = self.cursor?; // early return a None if it was None
+
+        Some(cursor.rotation.next_rotation())
     }
 
     pub fn DEBUG_test_cursor_local(&mut self, kind: PieceKind, position: Offset) {
         let piece = Piece {
             kind,
             rotation: Rotation::N,
+            position,
+        };
+        self.cursor = Some(piece)
+    }
+
+    // creates a random tetrimino and places it above the matrix
+    pub fn create_top_cursor(&mut self) {
+        let kind: PieceKind = rand::random();
+
+        let rotation = Rotation::N;
+        let position: Offset = (4, 19).into();
+
+        let piece = Piece {
+            kind,
+            rotation,
             position,
         };
         self.cursor = Some(piece)
@@ -143,8 +177,11 @@ impl Engine {
         self.cursor.is_some() && self.ticked_down_cursor().is_none()
     }
 
+    // // whether the cursor is at the bottom
+    // pub fn is_lock_down(&self) -> bool {}
+
     // get the new cursor if it was ticked down
-    fn ticked_down_cursor(&self) -> Option<Piece> {
+    pub fn ticked_down_cursor(&self) -> Option<Piece> {
         let Some(cursor) = self.cursor else {
             return None;
         };

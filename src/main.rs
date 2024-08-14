@@ -18,7 +18,6 @@ fn main() {
     }
 
     let mut engine = Engine::with_matrix(matrix);
-    engine.DEBUG_test_cursor_local(Kind::T, (5, 19).into());
 
     Interface::run(engine);
 }

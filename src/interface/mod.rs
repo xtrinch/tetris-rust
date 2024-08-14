@@ -1,3 +1,5 @@
+use crate::engine::piece::Kind;
+use crate::engine::piece::Rotation;
 use crate::engine::Color as SemanticColor;
 use crate::engine::MoveKind;
 use crate::engine::{Coordinate, Engine, Matrix};
@@ -28,6 +30,19 @@ struct SoftDropTick;
 struct Sleep(Duration);
 
 impl Interface {
+    // fn flush_and_readd_events() {
+    //     // flush and readd events
+    //     event_subsystem.flush_event(EventType::User);
+    //     timer = timer_subsystem.add_timer(
+    //         engine.drop_time().as_millis() as _,
+    //         Box::new(|| {
+    //             println!("Tick event timer triggered");
+    //             event_subsystem.push_custom_event(Tick).unwrap();
+    //             0
+    //         }),
+    //     );
+    // }
+
     pub fn run(mut engine: Engine) {
         let sdl = sdl2::init().expect("Failed to initialize sdl2");
 
@@ -61,7 +76,6 @@ impl Interface {
         let mut events = sdl.event_pump().expect("Failed to get event pump");
 
         event_subsystem.push_custom_event(Tick).unwrap();
-        // event_subsystem.push_custom_event(LockdownTick).unwrap();
 
         // whether we should redraw or not
         let mut dirty: bool = true;
@@ -76,36 +90,53 @@ impl Interface {
                     Event::Quit { .. } => return,
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
                         println!("Found tick event");
+
+                        // if we have a cursor to tick down, tick it down :)
+                        if engine.ticked_down_cursor().is_some() {
+                            engine.try_tick_down();
+                            let has_hit_bottom = engine.cursor_has_hit_bottom();
+
+                            if has_hit_bottom {
+                                event_subsystem.push_custom_event(LockdownTick).unwrap();
+                            }
+                        } else {
+                            // if we don't have a cursor, create one
+                            engine.create_top_cursor();
+                        }
+
                         timer = timer_subsystem.add_timer(
                             engine.drop_time().as_millis() as _,
                             Box::new(|| {
                                 println!("Tick event timer triggered");
                                 event_subsystem.push_custom_event(Tick).unwrap();
                                 0
-                            }), // Box<dyn FnMut() -> u32 + Send>
+                            }),
                         );
-
-                        // engine.move_cursor(MoveKind::Left);
-                        engine.try_tick_down();
 
                         dirty = true;
                     }
                     Event::User { .. } if event.as_user_event_type::<LockdownTick>().is_some() => {
                         println!("Found lockdown tick event");
+                        // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
+                        engine.hard_drop(); // TODO: handle it properly
+
                         dirty = true;
                         lock_down = true
                     }
                     Event::KeyDown {
                         keycode: Some(key), ..
                     } => {
-                        if let Ok(input) = Input::try_from(key) {
+                        if let Ok(input) = Input::try_from(key, engine.next_cursor_rotation()) {
+                            // TODO: flush and readd events if we're in lockdown phase?
+
                             match input {
                                 Input::Move(kind) => drop(engine.move_cursor(kind)),
                                 Input::HardDrop => {
                                     engine.hard_drop(); // hard drop
                                     lock_down = true
                                 }
-                                Input::SoftDrop => todo!("Soft drop tick"),
+                                Input::SoftDrop => println!("Soft drop tick"),
+                                Input::Rotation(kind) => engine.rotate_cursor(kind),
                             }
                             dirty = true
                         }
@@ -116,7 +147,7 @@ impl Interface {
 
             // scan the board, see what lines need to be cleared
             if lock_down {
-                engine.line_clear(|indices| ())
+                engine.line_clear(|indices| ());
             }
             if dirty {
                 draw(&mut canvas, &engine);
@@ -134,20 +165,26 @@ impl Interface {
 // types of actions the keyboard can make
 enum Input {
     Move(MoveKind),
+    Rotation(Rotation),
     SoftDrop,
     HardDrop,
 }
 
 // map various keyboard keys to actions within the game
-impl TryFrom<Keycode> for Input {
-    type Error = ();
-
-    fn try_from(key: Keycode) -> Result<Self, Self::Error> {
+impl Input {
+    fn try_from(key: Keycode, next_rotation: Option<Rotation>) -> Result<Input, ()> {
         Ok(match key {
             Keycode::Right => Self::Move(MoveKind::Right),
             Keycode::Left => Self::Move(MoveKind::Left),
-            Keycode::Up => Self::HardDrop,
+            Keycode::Up => {
+                if let Some(rotation) = next_rotation {
+                    Self::Rotation(rotation)
+                } else {
+                    Self::Rotation(Rotation::N)
+                }
+            }
             Keycode::Down => Self::SoftDrop,
+            Keycode::Space => Self::HardDrop,
             _ => return Err(()),
         })
     }
@@ -336,7 +373,7 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
         cell_draw_ctx.try_draw_cell(coord, cell);
     }
 
-    if let Some((cursor_cells, cursor_color)) = engine.cursor_info() {
+    if let Some((cursor_cells, cursor_color, _)) = engine.cursor_info() {
         for coord in cursor_cells {
             cell_draw_ctx.draw_cell(coord, cursor_color);
         }

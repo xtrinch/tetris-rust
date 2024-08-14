@@ -1,4 +1,7 @@
 use cgmath::Zero;
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
+use rand::Rng;
 
 use super::{Color, Matrix};
 use super::{Coordinate, Offset};
@@ -6,7 +9,7 @@ use cgmath::EuclideanSpace;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 
-pub(super) struct Piece {
+pub struct Piece {
     pub kind: Kind,       // these do not need to be in a constructor
     pub position: Offset, // holds x & y
     pub rotation: Rotation,
@@ -48,7 +51,7 @@ impl Piece {
         Some(coords)
     }
 
-    // will rotate a single cell
+    // will rotate a single tetrimino
     fn rotator(&self) -> impl Fn(Offset) -> Offset + '_ {
         // to capture lifetime of self, add '_
         |cell| match self.kind {
@@ -131,6 +134,21 @@ impl Kind {
     }
 }
 
+impl Distribution<Kind> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Kind {
+        match rng.gen_range(0..7) {
+            0 => Kind::I,
+            1 => Kind::J,
+            2 => Kind::L,
+            3 => Kind::O,
+            4 => Kind::S,
+            5 => Kind::T,
+            6 => Kind::Z,
+            _ => Kind::T, // default to T
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 // how the piece is rotated
 pub enum Rotation {
@@ -148,6 +166,15 @@ impl Rotation {
             Self::E => Offset::new(0, 1), // 2nd quadrant, so y has moved
             Self::S => Offset::new(1, 1), // 3rd quadrant, so both x and y have moved down
             Self::W => Offset::new(1, 0), // 4th quadrant, so only x has moved
+        }
+    }
+
+    pub fn next_rotation(&self) -> Self {
+        match self {
+            Self::N => Self::E,
+            Self::E => Self::S,
+            Self::S => Self::W,
+            Self::W => Self::N,
         }
     }
 }
