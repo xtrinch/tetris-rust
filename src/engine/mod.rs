@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use geometry::GridIncrement;
-use piece::{Kind as PieceKind, Piece, Rotation};
+use piece::{Piece, Rotation};
+use piece_kind::PieceKind;
 use rand::prelude::SliceRandom;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
@@ -12,6 +13,7 @@ use std::slice::ArrayChunks;
 
 mod geometry;
 pub mod piece;
+mod piece_kind;
 
 pub type Coordinate = Point2<usize>;
 type Offset = Vector2<isize>;
@@ -71,11 +73,8 @@ impl Engine {
     }
 
     // place the cursor into the matrix onto the position it's currently at
-    fn place_cursor(&mut self) {
-        let cursor = self
-            .cursor
-            .take()
-            .expect("Called place_cursor without a cursor");
+    pub fn place_cursor(&mut self) {
+        let cursor = self.cursor.unwrap();
 
         // validate that the piece does not overlap with any other pieces
         debug_assert!(
@@ -88,6 +87,18 @@ impl Engine {
         // place all of the squares of the piece into the matrix
         for coord in cursor.cells().unwrap() {
             self.matrix[coord] = Some(color);
+        }
+
+        // self.cursor = None // reset the cursor since we've placed it
+        // self.create_top_cursor();
+    }
+
+    // place the cursor into the matrix onto the position it's currently at
+    fn try_place_cursor(&mut self) {
+        if let Some(cursor) = self.cursor {
+            self.place_cursor();
+        } else {
+            println!("Tried placing a nonexistant cursor")
         }
     }
 
@@ -144,7 +155,7 @@ impl Engine {
 
     // creates a random tetrimino and places it above the matrix
     pub fn create_top_cursor(&mut self) {
-        let kind: PieceKind = rand::random();
+        let kind: PieceKind = rand::random(); // we can do this because we implemented the distribution trait for this enum!
 
         let rotation = Rotation::N;
         let position: Offset = (4, 19).into();
@@ -197,7 +208,9 @@ impl Engine {
             self.cursor = Some(new);
         }
 
-        self.place_cursor()
+        // since we could press keyboard multiple times during one tick cycle, we need to not panic if there's no cursor
+        self.try_place_cursor();
+        self.create_top_cursor();
     }
 
     // get an iterator for the cells of the matrix

@@ -1,4 +1,3 @@
-use crate::engine::piece::Kind;
 use crate::engine::piece::Rotation;
 use crate::engine::Color as SemanticColor;
 use crate::engine::MoveKind;
@@ -89,8 +88,6 @@ impl Interface {
                     // log any events with dbg
                     Event::Quit { .. } => return,
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
-                        println!("Found tick event");
-
                         // if we have a cursor to tick down, tick it down :)
                         if engine.ticked_down_cursor().is_some() {
                             engine.try_tick_down();
@@ -118,7 +115,8 @@ impl Interface {
                     Event::User { .. } if event.as_user_event_type::<LockdownTick>().is_some() => {
                         println!("Found lockdown tick event");
                         // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
-                        engine.hard_drop(); // TODO: handle it properly
+                        engine.place_cursor();
+                        engine.create_top_cursor();
 
                         dirty = true;
                         lock_down = true
