@@ -251,12 +251,16 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     };
 
     for (coord, cell) in engine.cells() {
+        cell_draw_ctx.draw_border(coord);
+    }
+
+    for (coord, cell) in engine.cells() {
         cell_draw_ctx.try_draw_cell(coord, cell);
     }
 
     if let Some((cursor_cells, cursor_color, _)) = engine.cursor_info() {
         for coord in cursor_cells {
-            cell_draw_ctx.draw_cell(coord, cursor_color, false);
+            cell_draw_ctx.try_draw_cell(coord, Some(cursor_color));
         }
     }
 
@@ -273,15 +277,7 @@ struct CellDrawContext<'canvas> {
 impl CellDrawContext<'_> {
     const CELL_COUNT: Vector2<u32> = Vector2::new(Matrix::WIDTH as u32, Matrix::HEIGHT as u32);
 
-    fn try_draw_cell(&mut self, coord: Coordinate, cell: Option<TetriminoColor>) {
-        let Some(color) = cell else {
-            return;
-        };
-
-        self.draw_cell(coord, color, false)
-    }
-
-    fn draw_cell(&mut self, coord: Coordinate, cell_color: TetriminoColor, empty: bool) {
+    fn get_rect(&mut self, coord: Coordinate) -> Rect {
         // // we get the width from the next cells coordinates because otherwise we end up with a rounding error
         // let this_x = (coord.x as u32 + 0) * matrix_width / Matrix::WIDTH as u32;
         // let this_y = (coord.y as u32 + 1) * matrix_height / Matrix::HEIGHT as u32;
@@ -290,6 +286,7 @@ impl CellDrawContext<'_> {
         // let prev_y = (coord.y as u32 + 0) * matrix_height / Matrix::HEIGHT as u32; // we take the previous y because that one will be ABOVE it
 
         // this is just a more complex version of the thing above which is much easier to understand
+
         let coord = coord.to_vec().cast::<u32>().unwrap();
         let this = (coord + Vector2::new(0, 1))
             .mul_element_wise(self.dims)
@@ -301,14 +298,32 @@ impl CellDrawContext<'_> {
         // our matrix goes bottom left +, their draw matrix goes from top left +, so we need to do some translation
         let cell_rect = Rect::new(
             self.origin.x + this.x as i32,
-            self.origin.y - this.y as i32, // we subtract so we go up instead of down since origin is top left for the draw matrix (we also add one since the rect is drawn in the opposite direction)
+            self.origin.y - this.y as i32 - 1, // we subtract so we go up instead of down since origin is top left for the draw matrix (we also add one since the rect is drawn in the opposite direction); -1 is because we do border overlap adjustments
             next.x - this.x + 1, // next x is "to the right", -1 to make the borders overlap
             this.y - next.y + 1, // prev_y is "higher", -1 to make the borders overlap
         );
 
-        self.canvas.set_draw_color(cell_color.screen_color());
+        cell_rect
+    }
+
+    fn try_draw_cell(&mut self, coord: Coordinate, cell: Option<TetriminoColor>) {
+        let Some(color) = cell else {
+            return;
+        };
+
+        let cell_rect = self.get_rect(coord);
+
+        self.canvas.set_draw_color(color.screen_color());
         self.canvas.fill_rect(cell_rect).unwrap();
+
         self.canvas.set_draw_color(Color::WHITE);
+        self.canvas.draw_rect(cell_rect).unwrap();
+    }
+
+    fn draw_border(&mut self, coord: Coordinate) {
+        let cell_rect = self.get_rect(coord);
+
+        self.canvas.set_draw_color(Color::RGB(130, 130, 130));
         self.canvas.draw_rect(cell_rect).unwrap();
     }
 }
