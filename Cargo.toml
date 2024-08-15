@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 cgmath = "0.18.0"
 rand = "0.8.5"
-sdl2 = "0.37.0"
+sdl2 = { features = ["ttf"], version = "0.37.0", default-features = false }
+

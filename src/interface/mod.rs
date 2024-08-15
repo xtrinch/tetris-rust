@@ -6,8 +6,11 @@ use crate::engine::{Coordinate, Engine};
 use crate::interface::render_traits::ScreenColor;
 use cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
 use sdl2::keyboard::Keycode;
+use sdl2::render::TextureQuery;
+use sdl2::ttf::Font;
 use sdl2::{event::Event, pixels::Color, rect::Rect, render::Canvas, video::Window};
 use std::cell;
+use std::path::Path;
 use std::time::Duration;
 use sub_rect::{Align, SubRect};
 
@@ -30,6 +33,13 @@ struct LockdownTick;
 struct SoftDropTick;
 struct Sleep(Duration);
 
+// handle the annoying Rect i32
+macro_rules! rect(
+    ($x:expr, $y:expr, $w:expr, $h:expr) => (
+        Rect::new($x as i32, $y as i32, $w as u32, $h as u32)
+    )
+);
+
 impl Interface {
     // fn flush_and_readd_events() {
     //     // flush and readd events
@@ -44,7 +54,36 @@ impl Interface {
     //     );
     // }
 
-    pub fn run(mut engine: Engine) {
+    // Scale fonts to a reasonable size when they're too big (though they might look less smooth)
+    fn get_centered_rect(
+        rect_width: u32,
+        rect_height: u32,
+        cons_width: u32,
+        cons_height: u32,
+    ) -> Rect {
+        let wr = rect_width as f32 / cons_width as f32;
+        let hr = rect_height as f32 / cons_height as f32;
+
+        let (w, h) = if wr > 1f32 || hr > 1f32 {
+            if wr > hr {
+                println!("Scaling down! The text will look worse!");
+                let h = (rect_height as f32 / wr) as i32;
+                (cons_width as i32, h)
+            } else {
+                println!("Scaling down! The text will look worse!");
+                let w = (rect_width as f32 / hr) as i32;
+                (w, cons_height as i32)
+            }
+        } else {
+            (rect_width as i32, rect_height as i32)
+        };
+
+        let cx = (800 as i32 - w) / 2;
+        let cy = (800 as i32 - h) / 2;
+        rect!(cx, cy, w, h)
+    }
+
+    pub fn run(mut engine: Engine) -> Result<(), String> {
         let sdl = sdl2::init().expect("Failed to initialize sdl2");
 
         let event_subsystem = sdl.event().expect("Failed to acquire event subsystem");
@@ -74,6 +113,16 @@ impl Interface {
                 .expect("Failed to get render canvas")
         };
 
+        let ttf_context = sdl2::ttf::init()
+            .map_err(|e| e.to_string())
+            .expect("Failed to initialize ttf context");
+
+        // Load the font
+        let path: &Path = Path::new("assets/Tinos-Regular.ttf");
+        let mut font = ttf_context
+            .load_font(path, 128)
+            .expect("Failed to load font");
+
         let mut events = sdl.event_pump().expect("Failed to get event pump");
 
         event_subsystem.push_custom_event(Tick).unwrap();
@@ -92,7 +141,7 @@ impl Interface {
                 // match dbg!(event) {
                 match event {
                     // log any events with dbg
-                    Event::Quit { .. } => return,
+                    Event::Quit { .. } => return Ok(()),
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
                         timer = timer_subsystem.add_timer(
                             engine.drop_time().as_millis() as _,
@@ -147,11 +196,9 @@ impl Interface {
                                 }
                                 Input::Hold => {
                                     if !hold_lock {
-                                        println!("HOLD LOCK IS FALSE");
                                         engine.try_hold();
                                     }
                                     hold_lock = true;
-                                    println!("HOLD LOCK IS GTRUE")
                                 }
                             }
                             dirty = true
@@ -163,13 +210,12 @@ impl Interface {
 
             // scan the board, see what lines need to be cleared
             if lock_down {
-                println!("IS LOCK DOWN");
                 engine.line_clear(|indices| ());
                 hold_lock = false;
                 lock_down = false;
             }
             if dirty {
-                draw(&mut canvas, &engine);
+                draw(&mut canvas, &mut font, &engine);
             }
             dirty = false;
         }
@@ -208,7 +254,7 @@ impl Input {
     }
 }
 
-fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
+fn draw(canvas: &mut Canvas<Window>, font: &mut Font, engine: &Engine) {
     canvas.set_draw_color(BACKGROUND_COLOR);
     canvas.clear();
     canvas.set_draw_color(Color::WHITE);
@@ -324,6 +370,25 @@ fn draw(canvas: &mut Canvas<Window>, engine: &Engine) {
     };
 
     hold_cell_draw_ctx.draw_matrix();
+
+    let texture_creator = canvas.texture_creator();
+
+    // render a surface, and convert it to a texture bound to the canvas
+    let surface = font
+        .render("Hello Rust!")
+        .blended(Color::WHITE)
+        .map_err(|e| e.to_string())
+        .expect("Failed to create surface");
+    let texture = texture_creator
+        .create_texture_from_surface(&surface)
+        .map_err(|e| e.to_string())
+        .expect("Failed to create texture");
+
+    let TextureQuery { width, height, .. } = texture.query();
+
+    canvas
+        .copy(&texture, None, Some(Rect::from(score1)))
+        .expect("Failed to copy to canvas");
 
     canvas.present();
 }
