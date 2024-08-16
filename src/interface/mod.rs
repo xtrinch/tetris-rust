@@ -60,12 +60,6 @@ impl Interface {
     pub fn run(&mut self) -> Result<(), String> {
         let sdl = sdl2::init().expect("Failed to initialize sdl2");
 
-        let event_subsystem = sdl.event().expect("Failed to acquire event subsystem");
-        event_subsystem.register_custom_event::<Tick>().unwrap();
-        event_subsystem
-            .register_custom_event::<LockdownTick>()
-            .unwrap();
-
         let mut canvas = {
             // evaluation block
             let video = sdl.video().expect("Failed to acquire display");
@@ -115,12 +109,19 @@ impl Interface {
         let mut is_soft_drop = false;
         let mut locking_down = false; // TODO: perhaps best to have a "state" enum instead of relying on this
 
-        let clone1 = event_subsystem.clone();
-        let static_event_subsystem: &'static _ = Box::leak(Box::new(clone1));
+        let static_event_subsystem: &'static _ = Box::leak(Box::new(
+            sdl.event().expect("Failed to acquire event subsystem"),
+        ));
+        static_event_subsystem
+            .register_custom_event::<Tick>()
+            .unwrap();
+        static_event_subsystem
+            .register_custom_event::<LockdownTick>()
+            .unwrap();
 
         self.engine.create_top_cursor(None);
 
-        event_subsystem.push_custom_event(Tick).unwrap();
+        static_event_subsystem.push_custom_event(Tick).unwrap();
 
         loop {
             for event in events.poll_iter() {
@@ -136,10 +137,6 @@ impl Interface {
                             continue;
                         }
 
-                        // let t = znjci.clone()
-                        if timer_tick.is_some() {
-                            timer_tick.as_ref().unwrap().cancel();
-                        }
                         timer_tick = Some(
                             CancellableTimer::after(
                                 self.engine.drop_time(is_soft_drop),
@@ -162,10 +159,6 @@ impl Interface {
                             if has_hit_bottom {
                                 locking_down = true;
 
-                                if timer_tick.is_some() {
-                                    timer_tick.as_ref().unwrap().cancel();
-                                }
-
                                 // add event after 0.5s!
                                 timer_lockdown = Some(
                                     CancellableTimer::after(Duration::from_millis(500), |err| {
@@ -184,7 +177,9 @@ impl Interface {
                         dirty = true;
                     }
                     Event::User { .. } if event.as_user_event_type::<LockdownTick>().is_some() => {
-                        println!("Found lockdown tick event");
+                        if (!locking_down) {
+                            continue;
+                        }
                         // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
                         self.engine.place_cursor();
                         self.engine.create_top_cursor(None);
