@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cancellable-timer = "0.1.0"
 cgmath = "0.18.0"
 rand = "0.8.5"
 sdl2 = { features = ["ttf"], version = "0.37.0", default-features = false }

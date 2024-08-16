@@ -1,4 +1,5 @@
 use crate::engine::Engine;
+use cancellable_timer::Timer as CancellableTimer;
 use cell_draw::CellDrawContext;
 use cgmath::Vector2;
 use input::Input;
@@ -107,6 +108,16 @@ impl Interface {
         let mut is_soft_drop = false;
 
         engine.create_top_cursor(None);
+
+        let tim = CancellableTimer::after(Duration::from_secs(3), |tets| {
+            print!("{:?}", tets);
+            if tets.is_err() {
+                return;
+            }
+            println!("OI!");
+        })
+        .unwrap();
+        tim.cancel();
 
         loop {
             for event in events.poll_iter() {
