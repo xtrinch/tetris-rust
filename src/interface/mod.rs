@@ -1,12 +1,17 @@
 use crate::engine::Engine;
-use cancellable_timer::Timer as CancellableTimer;
+use cancellable_timer::{Canceller, Timer as CancellableTimer};
 use cell_draw::CellDrawContext;
 use cgmath::Vector2;
 use input::Input;
 use sdl2::timer::Timer;
 use sdl2::ttf::Font;
+use sdl2::EventSubsystem;
 use sdl2::{event::Event, pixels::Color, rect::Rect, render::Canvas, video::Window};
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use sub_rect::{Align, SubRect};
 use text_draw::TextDrawContext;
@@ -90,7 +95,7 @@ impl Interface {
 
         let mut events = sdl.event_pump().expect("Failed to get event pump");
 
-        event_subsystem.push_custom_event(Tick).unwrap();
+        // event_subsystem.push_custom_event(Tick).unwrap();
 
         /*
         A tetrimino that is Hard dropped Locks down immediately. However, if a tetrimino
@@ -100,39 +105,77 @@ impl Interface {
 
         // whether we should redraw or not
         let mut dirty: bool = true;
-        let mut timer_tick: Timer;
-        let mut timer_lockdown: Timer;
-        let mut lock_down: bool = false;
+        let mut timer_lockdown: Option<Canceller> = None;
+        let mut timer_tick: Option<Canceller> = None;
+        let mut cursor_locked_down: bool = false;
         let mut paused = false;
         let mut hold_lock: bool = false;
         let mut is_soft_drop = false;
+        let mut locking_down = false; // TODO: perhaps best to have a "state" enum instead of relying on this
+
+        // let mut test2 = Arc::new(Mutex::new(Rc::new(RefCell::new(Vec::<i32>::new()))));
+        // let test1 = Arc::new(Mutex::new(event_subsystem));
+        // let znjci = test1.clone();
+        // let mut test1 = Rc::new(RefCell::new(Vec::<i32>::new()));
+
+        let clone1 = event_subsystem.clone();
+        let static_event_subsystem: &'static _ = Box::leak(Box::new(clone1));
 
         engine.create_top_cursor(None);
 
-        let tim = CancellableTimer::after(Duration::from_secs(3), |tets| {
-            print!("{:?}", tets);
-            if tets.is_err() {
-                return;
-            }
-            println!("OI!");
-        })
-        .unwrap();
-        tim.cancel();
+        // let mut timer_tick: Canceller = CancellableTimer::after(
+        //     engine.drop_time(false),
+        //     (move |_abc| {
+        //         // let counter = Arc::clone(&test1);
+        //         // &mut *test1.borrow_mut();
+        //         // &test1.lock();
+        //         static_event_subsystem.push_custom_event(Tick).unwrap();
+        //     }),
+        // )
+        // .unwrap();
+
+        event_subsystem.push_custom_event(Tick).unwrap();
 
         loop {
             for event in events.poll_iter() {
                 // match dbg!(event) {
                 match event {
                     // log any events with dbg
-                    Event::Quit { .. } => return Ok(()),
+                    Event::Quit { .. } => {
+                        return Ok(());
+                    }
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
-                        println!("{}", is_soft_drop);
-                        timer_tick = timer_subsystem.add_timer(
-                            engine.drop_time(is_soft_drop).as_millis() as _,
-                            Box::new(|| {
-                                event_subsystem.push_custom_event(Tick).unwrap();
-                                0
-                            }),
+                        println!("Timer ticky picky?{}", is_soft_drop);
+                        if locking_down {
+                            continue;
+                        }
+                        // timer_tick =
+                        // CancellableTimer::after(engine.drop_time(is_soft_drop), move |err| {
+                        //     if err.is_err() {
+                        //         return;
+                        //     }
+                        //     // event_subsystem.push_custom_event(Tick).unwrap();
+                        //     test.push(1 as i32);
+                        // })
+                        // .unwrap();
+
+                        // let t = znjci.clone()
+                        if timer_tick.is_some() {
+                            timer_tick.as_ref().unwrap().cancel();
+                        }
+                        timer_tick = Some(
+                            CancellableTimer::after(
+                                engine.drop_time(is_soft_drop),
+                                (move |_abc| {
+                                    // let counter = Arc::clone(&test1);
+                                    // &mut *test1.borrow_mut();
+                                    // &test1.lock();
+
+                                    println!("TIMER TICK");
+                                    static_event_subsystem.push_custom_event(Tick).unwrap();
+                                }),
+                            )
+                            .unwrap(),
                         );
 
                         if paused {
@@ -145,13 +188,23 @@ impl Interface {
                             let has_hit_bottom = engine.cursor_has_hit_bottom();
 
                             if has_hit_bottom {
+                                locking_down = true;
+
+                                if timer_tick.is_some() {
+                                    timer_tick.as_ref().unwrap().cancel();
+                                }
+
                                 // add event after 0.5s!
-                                timer_lockdown = timer_subsystem.add_timer(
-                                    Duration::from_millis(500).as_millis() as _,
-                                    Box::new(|| {
-                                        event_subsystem.push_custom_event(LockdownTick).unwrap();
-                                        0
-                                    }),
+                                timer_lockdown = Some(
+                                    CancellableTimer::after(Duration::from_millis(500), |err| {
+                                        if err.is_err() {
+                                            return;
+                                        }
+                                        static_event_subsystem
+                                            .push_custom_event(LockdownTick)
+                                            .unwrap();
+                                    })
+                                    .unwrap(),
                                 );
                             }
                         }
@@ -165,7 +218,22 @@ impl Interface {
                         engine.create_top_cursor(None);
 
                         dirty = true;
-                        lock_down = true
+                        cursor_locked_down = true;
+
+                        timer_tick = Some(
+                            CancellableTimer::after(
+                                engine.drop_time(is_soft_drop),
+                                (move |_abc| {
+                                    // let counter = Arc::clone(&test1);
+                                    // &mut *test1.borrow_mut();
+                                    // &test1.lock();
+
+                                    println!("TIMER TICK");
+                                    static_event_subsystem.push_custom_event(Tick).unwrap();
+                                }),
+                            )
+                            .unwrap(),
+                        );
                     }
                     Event::KeyUp {
                         keycode: Some(key), ..
@@ -187,23 +255,56 @@ impl Interface {
                             // TODO: flush and readd events if we're in lockdown phase?
 
                             match input {
-                                Input::Move(kind) => drop(engine.move_cursor(kind)),
+                                Input::Move(kind) => {
+                                    // TODO: to func
+                                    if locking_down & timer_lockdown.is_some() {
+                                        timer_lockdown.as_ref().unwrap().cancel();
+                                        timer_lockdown = Some(
+                                            CancellableTimer::after(
+                                                Duration::from_millis(500),
+                                                |err| {
+                                                    if err.is_err() {
+                                                        return;
+                                                    }
+                                                    static_event_subsystem
+                                                        .push_custom_event(LockdownTick)
+                                                        .unwrap();
+                                                },
+                                            )
+                                            .unwrap(),
+                                        );
+                                    }
+
+                                    drop(engine.move_cursor(kind))
+                                }
                                 Input::HardDrop => {
                                     engine.hard_drop(); // hard drop
                                     engine.create_top_cursor(None);
-                                    lock_down = true
+                                    cursor_locked_down = true
                                 }
                                 Input::SoftDrop => {
                                     println!("Soft drop tick");
-                                    if !is_soft_drop {
+                                    if !is_soft_drop && !locking_down {
                                         is_soft_drop = true;
                                         // TODO: to func?
-                                        timer_tick = timer_subsystem.add_timer(
-                                            engine.drop_time(is_soft_drop).as_millis() as _,
-                                            Box::new(|| {
-                                                event_subsystem.push_custom_event(Tick).unwrap();
-                                                0
-                                            }),
+
+                                        if timer_tick.is_some() {
+                                            timer_tick.as_ref().unwrap().cancel();
+                                        }
+                                        timer_tick = Some(
+                                            CancellableTimer::after(
+                                                engine.drop_time(is_soft_drop),
+                                                |err| {
+                                                    if err.is_err() {
+                                                        return;
+                                                    }
+                                                    println!("SOFT DROP TICK");
+                                                    static_event_subsystem
+                                                        .push_custom_event(Tick)
+                                                        .unwrap();
+                                                },
+                                            )
+                                            .unwrap(),
                                         );
                                     }
                                 }
@@ -228,11 +329,12 @@ impl Interface {
             }
 
             // scan the board, see what lines need to be cleared
-            if lock_down {
+            if cursor_locked_down {
                 engine.line_clear(|indices| ());
                 hold_lock = false;
-                lock_down = false;
+                cursor_locked_down = false;
                 is_soft_drop = false;
+                locking_down = false;
             }
             if dirty {
                 draw(&mut canvas, &mut font, &engine);
