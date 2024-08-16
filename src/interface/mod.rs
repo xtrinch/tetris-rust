@@ -142,8 +142,6 @@ impl Interface {
                                         0
                                     }),
                                 );
-
-                                // event_subsystem.push_custom_event(LockdownTick).unwrap();
                             }
                         }
 
