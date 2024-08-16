@@ -2,8 +2,6 @@ use crate::engine::Engine;
 use cell_draw::CellDrawContext;
 use cgmath::Vector2;
 use input::Input;
-use rand::Rng;
-use sdl2::render::TextureQuery;
 use sdl2::timer::Timer;
 use sdl2::ttf::Font;
 use sdl2::{event::Event, pixels::Color, rect::Rect, render::Canvas, video::Window};
@@ -93,9 +91,16 @@ impl Interface {
 
         event_subsystem.push_custom_event(Tick).unwrap();
 
+        /*
+        A tetrimino that is Hard dropped Locks down immediately. However, if a tetrimino
+        naturally falls or Soft drops onto a Surface, it is given 0.5 seconds on a Lock
+        down timer before it actually Locks down.
+        */
+
         // whether we should redraw or not
         let mut dirty: bool = true;
-        let mut timer: Timer;
+        let mut timer_tick: Timer;
+        let mut timer_lockdown: Timer;
         let mut lock_down: bool = false;
         let mut paused = false;
         let mut hold_lock: bool = false;
@@ -111,7 +116,7 @@ impl Interface {
                     Event::Quit { .. } => return Ok(()),
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
                         println!("{}", is_soft_drop);
-                        timer = timer_subsystem.add_timer(
+                        timer_tick = timer_subsystem.add_timer(
                             engine.drop_time(is_soft_drop).as_millis() as _,
                             Box::new(|| {
                                 event_subsystem.push_custom_event(Tick).unwrap();
@@ -129,7 +134,16 @@ impl Interface {
                             let has_hit_bottom = engine.cursor_has_hit_bottom();
 
                             if has_hit_bottom {
-                                event_subsystem.push_custom_event(LockdownTick).unwrap();
+                                // add event after 0.5s!
+                                timer_lockdown = timer_subsystem.add_timer(
+                                    Duration::from_millis(500).as_millis() as _,
+                                    Box::new(|| {
+                                        event_subsystem.push_custom_event(LockdownTick).unwrap();
+                                        0
+                                    }),
+                                );
+
+                                // event_subsystem.push_custom_event(LockdownTick).unwrap();
                             }
                         }
 
@@ -175,7 +189,7 @@ impl Interface {
                                     if !is_soft_drop {
                                         is_soft_drop = true;
                                         // TODO: to func?
-                                        timer = timer_subsystem.add_timer(
+                                        timer_tick = timer_subsystem.add_timer(
                                             engine.drop_time(is_soft_drop).as_millis() as _,
                                             Box::new(|| {
                                                 event_subsystem.push_custom_event(Tick).unwrap();
@@ -184,7 +198,9 @@ impl Interface {
                                         );
                                     }
                                 }
-                                Input::Rotation(kind) => engine.rotate_cursor(kind),
+                                Input::Rotation(kind) => {
+                                    engine.rotate_and_adjust_cursor(kind);
+                                }
                                 Input::Pause => {
                                     paused = !paused;
                                 }
@@ -393,7 +409,7 @@ fn draw(canvas: &mut Canvas<Window>, font: &mut Font, engine: &Engine) {
     let mut text_draw_ctx: TextDrawContext = TextDrawContext {
         canvas,
         font,
-        text: "LINES",
+        text: "SCORE",
         rect: lines_text,
     };
     text_draw_ctx.draw_text();
@@ -401,11 +417,11 @@ fn draw(canvas: &mut Canvas<Window>, font: &mut Font, engine: &Engine) {
     // lines text
     let lines_text = score_bottom.sub_rect((0.8, 0.85), Some((Align::Center, Align::Far)));
 
-    let lines_reached = engine.lines_reached;
+    let score = engine.score;
     let mut text_draw_ctx: TextDrawContext = TextDrawContext {
         canvas,
         font,
-        text: &format!("  {lines_reached}  "),
+        text: &format!("  {score}  "),
         rect: lines_text,
     };
     text_draw_ctx.draw_text();

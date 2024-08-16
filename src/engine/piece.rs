@@ -25,6 +25,10 @@ impl Piece {
         }
     }
 
+    pub fn has_out_of_bounds_coords(&self) -> bool {
+        self.cells().into_iter().any(|coord| coord[0].x == 1)
+    }
+
     // returns coordinates of piece; None on an invalid cursor position;
     // returns an array of length CELL_COUNT
     pub fn cells(&self) -> Option<[Coordinate; Self::CELL_COUNT]> {

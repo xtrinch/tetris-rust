@@ -38,6 +38,7 @@ pub struct Engine {
     cursor: Option<Piece>, // current active piece (the one falling down), optional
     pub level: u8,         // fixed goal System requires 10 lines each level through level 15
     pub lines_reached: u32,
+    pub score: u32, // will equal an acumulation of lines reached for the simple scoring
 }
 
 impl Engine {
@@ -78,6 +79,7 @@ impl Engine {
             hold: None,
             level: 1,
             lines_reached: 0,
+            score: 0,
         }
     }
 
@@ -103,6 +105,10 @@ impl Engine {
             "Tried to place cursor in an unplaceable location: {:?}",
             cursor
         );
+
+        // if !self.matrix.is_placeable(&cursor) {
+        //     return;
+        // }
 
         self.matrix.place_piece(cursor);
     }
@@ -141,15 +147,30 @@ impl Engine {
         cursor.rotation = kind;
     }
 
+    pub fn rotate_and_adjust_cursor(&mut self, kind: Rotation) -> Option<()> {
+        // check if any position is out of bounds
+        let mut cursor_clone = self.cursor?.clone();
+
+        cursor_clone.rotation = kind;
+
+        // if cursor has out of bounds coordinates, do not rotate
+        if cursor_clone.has_out_of_bounds_coords() {
+            return None;
+        }
+
+        // otherwise perform the rotation
+        self.cursor = Some(cursor_clone);
+
+        return Some(());
+    }
+
     pub fn cursor_info(
         &self,
     ) -> Option<([Coordinate; Piece::CELL_COUNT], TetriminoColor, Rotation)> {
         let cursor: Piece = self.cursor?; // early return a None if it was None
-        Some((
-            cursor.cells().unwrap(),
-            cursor.kind.color(),
-            cursor.rotation,
-        ))
+        let cells = cursor.cells()?;
+
+        Some((cells, cursor.kind.color(), cursor.rotation))
     }
 
     // current cursor rotation
@@ -374,6 +395,7 @@ impl Engine {
         self.matrix.clear_lines(lines.as_slice());
 
         self.lines_reached += lines.len() as u32;
+        self.score += lines.len() as u32;
 
         if self.lines_reached >= Self::LINES_PER_LEVEL {
             self.level += 1;
