@@ -3,15 +3,10 @@ use cancellable_timer::{Canceller, Timer as CancellableTimer};
 use cell_draw::CellDrawContext;
 use cgmath::Vector2;
 use input::Input;
-use sdl2::timer::Timer;
-use sdl2::ttf::{Font, Sdl2TtfContext};
+use sdl2::ttf::Sdl2TtfContext;
 use sdl2::{event::Event, pixels::Color, rect::Rect, render::Canvas, video::Window};
-use sdl2::{EventPump, EventSubsystem, Sdl, VideoSubsystem};
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
+use sdl2::{EventPump, EventSubsystem, Sdl};
 use std::path::Path;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use sub_rect::{Align, SubRect};
 use text_draw::TextDrawContext;
@@ -41,6 +36,7 @@ pub struct Interface {
     pub canvas: Canvas<Window>,
     pub events: EventPump,
     pub ttf_context: Sdl2TtfContext,
+    pub static_event_subsystem: &'static EventSubsystem,
 }
 
 impl Interface {
@@ -57,10 +53,10 @@ impl Interface {
     //     );
     // }
 
-    pub fn new(mut engine: Engine) -> Self {
+    pub fn new(engine: Engine) -> Self {
         let sdl: Sdl = sdl2::init().expect("Failed to initialize sdl2");
         let video = sdl.video().expect("Failed to acquire display");
-        let mut canvas = {
+        let canvas = {
             // evaluation block
             let window = video
                 .window("Tetris", INIT_SIZE.x, INIT_SIZE.y)
@@ -76,11 +72,15 @@ impl Interface {
                 .build()
                 .expect("Failed to get render canvas")
         };
-        let mut events = sdl.event_pump().expect("Failed to get event pump");
+        let events = sdl.event_pump().expect("Failed to get event pump");
 
         let ttf_context = sdl2::ttf::init()
             .map_err(|e| e.to_string())
             .expect("Failed to initialize ttf context");
+
+        let static_event_subsystem: &'static _ = Box::leak(Box::new(
+            sdl.event().expect("Failed to acquire event subsystem"),
+        ));
 
         Self {
             engine,
@@ -88,13 +88,14 @@ impl Interface {
             canvas,
             events,
             ttf_context,
+            static_event_subsystem,
         }
     }
 
     pub fn run(&mut self) -> Result<(), String> {
-        let static_event_subsystem: &'static _ = Box::leak(Box::new(
-            self.sdl.event().expect("Failed to acquire event subsystem"),
-        ));
+        // let static_event_subsystem: &'static _ = Box::leak(Box::new(
+        //     self.sdl.event().expect("Failed to acquire event subsystem"),
+        // ));
 
         /*
         A tetrimino that is Hard dropped Locks down immediately. However, if a tetrimino
@@ -112,16 +113,16 @@ impl Interface {
         let mut is_soft_drop = false;
         let mut locking_down = false; // TODO: perhaps best to have a "state" enum instead of relying on this
 
-        static_event_subsystem
+        self.static_event_subsystem
             .register_custom_event::<Tick>()
             .unwrap();
-        static_event_subsystem
+        self.static_event_subsystem
             .register_custom_event::<LockdownTick>()
             .unwrap();
 
         self.engine.create_top_cursor(None);
 
-        static_event_subsystem.push_custom_event(Tick).unwrap();
+        self.static_event_subsystem.push_custom_event(Tick).unwrap();
 
         loop {
             for event in self.events.poll_iter() {
@@ -137,11 +138,12 @@ impl Interface {
                             continue;
                         }
 
+                        let s = self.static_event_subsystem;
                         timer_tick = Some(
                             CancellableTimer::after(
                                 self.engine.drop_time(is_soft_drop),
                                 (move |_abc| {
-                                    static_event_subsystem.push_custom_event(Tick).unwrap();
+                                    s.push_custom_event(Tick).unwrap();
                                 }),
                             )
                             .unwrap(),
@@ -165,7 +167,7 @@ impl Interface {
                                         if err.is_err() {
                                             return;
                                         }
-                                        static_event_subsystem
+                                        self.static_event_subsystem
                                             .push_custom_event(LockdownTick)
                                             .unwrap();
                                     })
@@ -187,11 +189,12 @@ impl Interface {
                         dirty = true;
                         cursor_locked_down = true;
 
+                        let s = self.static_event_subsystem;
                         timer_tick = Some(
                             CancellableTimer::after(
                                 self.engine.drop_time(is_soft_drop),
                                 (move |_abc| {
-                                    static_event_subsystem.push_custom_event(Tick).unwrap();
+                                    s.push_custom_event(Tick).unwrap();
                                 }),
                             )
                             .unwrap(),
@@ -216,8 +219,6 @@ impl Interface {
                     } => {
                         if let Ok(input) = Input::try_from(key, self.engine.next_cursor_rotation())
                         {
-                            // TODO: flush and readd events if we're in lockdown phase?
-
                             match input {
                                 Input::Move(kind) => {
                                     // TODO: to func
@@ -230,7 +231,7 @@ impl Interface {
                                                     if err.is_err() {
                                                         return;
                                                     }
-                                                    static_event_subsystem
+                                                    self.static_event_subsystem
                                                         .push_custom_event(LockdownTick)
                                                         .unwrap();
                                                 },
@@ -263,7 +264,7 @@ impl Interface {
                                                         return;
                                                     }
                                                     println!("SOFT DROP TICK");
-                                                    static_event_subsystem
+                                                    self.static_event_subsystem
                                                         .push_custom_event(Tick)
                                                         .unwrap();
                                                 },
@@ -306,6 +307,19 @@ impl Interface {
             dirty = false;
         }
     }
+
+    // fn timer<T>(&mut self, event: Tick LockdownTick, time: Duration) -> Option<Canceller> {
+    //     let s = self.static_event_subsystem;
+    //     Some(
+    //         CancellableTimer::after(
+    //             time,
+    //             (move |_abc| {
+    //                 s.push_custom_event(event).unwrap();
+    //             }),
+    //         )
+    //         .unwrap(),
+    //     )
+    // }
 
     fn draw(&mut self) {
         // Load the font
