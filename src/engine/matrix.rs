@@ -123,31 +123,22 @@ where
     }
 
     pub fn has_piece_out_of_bounds_coords(&self, piece: &Piece) -> bool {
-        let negative = piece.matrix_offsets().into_iter().any(|coord| {
+        piece.matrix_offsets().into_iter().any(|coord| {
             let is_invalid = coord[0] < 0 || coord[1] < 0 || coord[0] >= WIDTH as isize;
             if is_invalid {
                 return true;
             }
 
+            // cast to something we can index the matrix with
             let positive_offset = coord.cast::<usize>().unwrap(); // the question mark denotes that if this returns none, the whole thing will return none
             let coord = Coordinate::from_vec(positive_offset);
             if self.on_matrix(coord) && self[coord].is_some() {
+                // it's on the matrix and overlapping
                 return true;
             }
 
             false
-        });
-
-        if negative {
-            return true;
-        }
-
-        // check for overlapping
-        if self.piece_cells(piece).is_none() {
-            return true;
-        }
-
-        false
+        })
     }
 
     // returns coordinates of piece; None on an invalid cursor position;
