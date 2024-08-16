@@ -44,6 +44,14 @@ impl Piece {
         let position: Offset = self.position;
         move |cell: Offset| cell + position // move it into address space
     }
+
+    // non matrix-specific offsets
+    pub fn matrix_offsets(&self) -> [Offset; Self::CELL_COUNT] {
+        // array of 4 offsets which we need to convert into coordinates
+        let offsets = self.kind.cells().map(self.rotator()).map(self.positioner());
+
+        offsets
+    }
 }
 
 // #[cfg(test)]

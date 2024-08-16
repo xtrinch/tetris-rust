@@ -1,4 +1,4 @@
-use super::{color::TetriminoColor, piece::Piece, Coordinate};
+use super::{color::TetriminoColor, piece::Piece, Coordinate, Offset};
 use crate::engine::geometry::GridIncrement;
 use cgmath::EuclideanSpace;
 use std::{
@@ -123,20 +123,38 @@ where
     }
 
     pub fn has_piece_out_of_bounds_coords(&self, piece: &Piece) -> bool {
-        self.piece_cells(piece)
-            .into_iter()
-            .any(|coord| coord[0].x == 1)
+        let negative = piece.matrix_offsets().into_iter().any(|coord| {
+            let is_invalid = coord[0] < 0 || coord[1] < 0 || coord[0] >= WIDTH as isize;
+            if is_invalid {
+                return true;
+            }
+
+            let positive_offset = coord.cast::<usize>().unwrap(); // the question mark denotes that if this returns none, the whole thing will return none
+            let coord = Coordinate::from_vec(positive_offset);
+            if self.on_matrix(coord) && self[coord].is_some() {
+                return true;
+            }
+
+            false
+        });
+
+        if negative {
+            return true;
+        }
+
+        // check for overlapping
+        if self.piece_cells(piece).is_none() {
+            return true;
+        }
+
+        false
     }
 
     // returns coordinates of piece; None on an invalid cursor position;
     // returns an array of length CELL_COUNT
     pub fn piece_cells(&self, piece: &Piece) -> Option<[Coordinate; Piece::CELL_COUNT]> {
         // array of 4 offsets which we need to convert into coordinates
-        let offsets = piece
-            .kind
-            .cells()
-            .map(piece.rotator())
-            .map(piece.positioner());
+        let offsets = piece.matrix_offsets();
 
         let mut coords = [Coordinate::origin(); Piece::CELL_COUNT];
 
@@ -146,7 +164,7 @@ where
             let positive_offset = offset.cast::<usize>()?; // the question mark denotes that if this returns none, the whole thing will return none
             let coord = Coordinate::from_vec(positive_offset);
 
-            // // check that the position is within bounds, the negative check is already done by the conversion above
+            // check that the position is within bounds, the negative check is already done by the conversion above
             if self.valid_coord(coord) {
                 *coord_slot = coord;
             } else {
