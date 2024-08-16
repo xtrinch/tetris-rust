@@ -154,7 +154,7 @@ impl Engine {
         cursor_clone.rotation = kind;
 
         // if cursor has out of bounds coordinates, do not rotate
-        if cursor_clone.has_out_of_bounds_coords() {
+        if self.matrix.has_piece_out_of_bounds_coords(&cursor_clone) {
             return None;
         }
 
@@ -168,7 +168,7 @@ impl Engine {
         &self,
     ) -> Option<([Coordinate; Piece::CELL_COUNT], TetriminoColor, Rotation)> {
         let cursor: Piece = self.cursor?; // early return a None if it was None
-        let cells = cursor.cells()?;
+        let cells = self.matrix.piece_cells(&cursor)?;
 
         Some((cells, cursor.kind.color(), cursor.rotation))
     }
@@ -212,7 +212,7 @@ impl Engine {
                     let inside_index = index;
                     piece.position = (0, ((inside_index) * 4) as isize).into();
 
-                    for coord in piece.cells().unwrap() {
+                    for coord in self.matrix.piece_cells(&piece).unwrap() {
                         // TODO: some constants
                         // add to y so we get a top-to-bottom queue
                         self.queue_matrix[(coord.x, coord.y).into()] = Some(piece.kind.color());

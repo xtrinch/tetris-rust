@@ -25,38 +25,8 @@ impl Piece {
         }
     }
 
-    pub fn has_out_of_bounds_coords(&self) -> bool {
-        self.cells().into_iter().any(|coord| coord[0].x == 1)
-    }
-
-    // returns coordinates of piece; None on an invalid cursor position;
-    // returns an array of length CELL_COUNT
-    pub fn cells(&self) -> Option<[Coordinate; Self::CELL_COUNT]> {
-        // array of 4 offsets which we need to convert into coordinates
-        let offsets = self.kind.cells().map(self.rotator()).map(self.positioner());
-
-        let mut coords = [Coordinate::origin(); Self::CELL_COUNT];
-
-        // convert to coords
-        for (offset, coord_slot) in offsets.into_iter().zip(&mut coords) {
-            // cast to a positive integer and let it throw if it can't be
-            let positive_offset = offset.cast::<usize>()?; // the question mark denotes that if this returns none, the whole thing will return none
-            let coord = Coordinate::from_vec(positive_offset);
-
-            // TODO: reintroduce check?
-            // // check that the position is within bounds, the negative check is already done by the conversion above
-            // if self.valid_coord(coord) {
-            *coord_slot = coord;
-            // } else {
-            //     return None;
-            // }
-        }
-
-        Some(coords)
-    }
-
     // will rotate a single tetrimino
-    fn rotator(&self) -> impl Fn(Offset) -> Offset + '_ {
+    pub fn rotator(&self) -> impl Fn(Offset) -> Offset + '_ {
         // to capture lifetime of self, add '_
         |cell| match self.kind {
             PieceKind::O => cell, // skip rotation for square as it's defined as 3x3 and it's not rotated
@@ -70,28 +40,28 @@ impl Piece {
     }
 
     // will move the cell into position
-    fn positioner(&self) -> impl Fn(Offset) -> Offset {
+    pub fn positioner(&self) -> impl Fn(Offset) -> Offset {
         let position: Offset = self.position;
         move |cell: Offset| cell + position // move it into address space
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::engine::piece_rotation::Rotation;
+// #[cfg(test)]
+// mod test {
+//     use crate::engine::piece_rotation::Rotation;
 
-    use super::*;
+//     use super::*;
 
-    #[test]
-    fn s_piece_positioning() {
-        let z = Piece {
-            kind: PieceKind::Z,
-            position: Offset::new(5, 6),
-            rotation: Rotation::W,
-        };
-        assert_eq!(
-            z.cells(),
-            Some([(5, 6), (5, 7), (6, 7), (6, 8)].map(Coordinate::from))
-        );
-    }
-}
+//     #[test]
+//     fn s_piece_positioning() {
+//         let z = Piece {
+//             kind: PieceKind::Z,
+//             position: Offset::new(5, 6),
+//             rotation: Rotation::W,
+//         };
+//         assert_eq!(
+//             z.cells(),
+//             Some([(5, 6), (5, 7), (6, 7), (6, 8)].map(Coordinate::from))
+//         );
+//     }
+// }

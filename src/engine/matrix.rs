@@ -1,5 +1,6 @@
 use super::{color::TetriminoColor, piece::Piece, Coordinate};
 use crate::engine::geometry::GridIncrement;
+use cgmath::EuclideanSpace;
 use std::{
     ops::{Index, IndexMut},
     slice::ArrayChunks,
@@ -44,7 +45,7 @@ where
     // check if piece is either above the matrix or in a full space on the matrix
     pub fn is_clipping(&self, piece: &Piece) -> bool {
         // if some cells are None, they are clipping because they are out of bounds
-        let Some(cells) = piece.cells() else {
+        let Some(cells) = self.piece_cells(piece) else {
             return true;
         };
 
@@ -55,7 +56,7 @@ where
 
     // check if piece is placeable on the matrix
     pub fn is_placeable(&self, piece: &Piece) -> bool {
-        let Some(cells) = piece.cells() else {
+        let Some(cells) = self.piece_cells(piece) else {
             return false;
         };
 
@@ -65,7 +66,7 @@ where
     }
 
     fn is_moveable(&self, piece: &Piece) -> bool {
-        let Some(cells) = piece.cells() else {
+        let Some(cells) = self.piece_cells(piece) else {
             return false;
         };
 
@@ -116,9 +117,44 @@ where
     pub fn place_piece(&mut self, piece: Piece) {
         let color: TetriminoColor = piece.kind.color();
 
-        for coord in piece.cells().unwrap() {
+        for coord in self.piece_cells(&piece).unwrap() {
             self[coord] = Some(color);
         }
+    }
+
+    pub fn has_piece_out_of_bounds_coords(&self, piece: &Piece) -> bool {
+        self.piece_cells(piece)
+            .into_iter()
+            .any(|coord| coord[0].x == 1)
+    }
+
+    // returns coordinates of piece; None on an invalid cursor position;
+    // returns an array of length CELL_COUNT
+    pub fn piece_cells(&self, piece: &Piece) -> Option<[Coordinate; Piece::CELL_COUNT]> {
+        // array of 4 offsets which we need to convert into coordinates
+        let offsets = piece
+            .kind
+            .cells()
+            .map(piece.rotator())
+            .map(piece.positioner());
+
+        let mut coords = [Coordinate::origin(); Piece::CELL_COUNT];
+
+        // convert to coords
+        for (offset, coord_slot) in offsets.into_iter().zip(&mut coords) {
+            // cast to a positive integer and let it throw if it can't be
+            let positive_offset = offset.cast::<usize>()?; // the question mark denotes that if this returns none, the whole thing will return none
+            let coord = Coordinate::from_vec(positive_offset);
+
+            // // check that the position is within bounds, the negative check is already done by the conversion above
+            if self.valid_coord(coord) {
+                *coord_slot = coord;
+            } else {
+                return None;
+            }
+        }
+
+        Some(coords)
     }
 }
 
