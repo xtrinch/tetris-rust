@@ -2,7 +2,9 @@ use crate::engine::Engine;
 use cell_draw::CellDrawContext;
 use cgmath::Vector2;
 use input::Input;
+use rand::Rng;
 use sdl2::render::TextureQuery;
+use sdl2::timer::Timer;
 use sdl2::ttf::Font;
 use sdl2::{event::Event, pixels::Color, rect::Rect, render::Canvas, video::Window};
 use std::path::Path;
@@ -23,6 +25,7 @@ pub struct Interface {
 const INIT_SIZE: Vector2<u32> = Vector2::new(1024, 1024);
 const BACKGROUND_COLOR: Color = Color::RGB(0x10, 0x10, 0x18);
 const MATRIX_COLOR: Color = Color::RGB(0x66, 0x77, 0x77);
+const MATRIX_CONTAINER_COLOR: Color = Color::RGB(0x22, 0x22, 0x22);
 const PLACEHOLDER_2: Color = Color::RGB(0x66, 0x77, 0x77);
 const PLACEHOLDER_3: Color = Color::RGB(0x77, 0x88, 0x88);
 
@@ -81,9 +84,9 @@ impl Interface {
             .expect("Failed to initialize ttf context");
 
         // Load the font
-        let path: &Path = Path::new("assets/Tinos-Regular.ttf");
+        let path: &Path = Path::new("assets/NewAmsterdam-Regular.ttf");
         let mut font = ttf_context
-            .load_font(path, 128)
+            .load_font(path, 512)
             .expect("Failed to load font");
 
         let mut events = sdl.event_pump().expect("Failed to get event pump");
@@ -92,10 +95,11 @@ impl Interface {
 
         // whether we should redraw or not
         let mut dirty: bool = true;
-        let mut timer;
+        let mut timer: Timer;
         let mut lock_down: bool = false;
         let mut paused = false;
         let mut hold_lock: bool = false;
+        let mut is_soft_drop = false;
 
         engine.create_top_cursor(None);
 
@@ -106,8 +110,9 @@ impl Interface {
                     // log any events with dbg
                     Event::Quit { .. } => return Ok(()),
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
+                        println!("{}", is_soft_drop);
                         timer = timer_subsystem.add_timer(
-                            engine.drop_time().as_millis() as _,
+                            engine.drop_time(is_soft_drop).as_millis() as _,
                             Box::new(|| {
                                 event_subsystem.push_custom_event(Tick).unwrap();
                                 0
@@ -139,6 +144,19 @@ impl Interface {
                         dirty = true;
                         lock_down = true
                     }
+                    Event::KeyUp {
+                        keycode: Some(key), ..
+                    } => {
+                        if let Ok(input) = Input::try_from(key, engine.next_cursor_rotation()) {
+                            match input {
+                                Input::SoftDrop => {
+                                    println!("Soft drop tick up");
+                                    is_soft_drop = false;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                     Event::KeyDown {
                         keycode: Some(key), ..
                     } => {
@@ -152,7 +170,20 @@ impl Interface {
                                     engine.create_top_cursor(None);
                                     lock_down = true
                                 }
-                                Input::SoftDrop => println!("Soft drop tick"),
+                                Input::SoftDrop => {
+                                    println!("Soft drop tick");
+                                    if !is_soft_drop {
+                                        is_soft_drop = true;
+                                        // TODO: to func?
+                                        timer = timer_subsystem.add_timer(
+                                            engine.drop_time(is_soft_drop).as_millis() as _,
+                                            Box::new(|| {
+                                                event_subsystem.push_custom_event(Tick).unwrap();
+                                                0
+                                            }),
+                                        );
+                                    }
+                                }
                                 Input::Rotation(kind) => engine.rotate_cursor(kind),
                                 Input::Pause => {
                                     paused = !paused;
@@ -176,6 +207,7 @@ impl Interface {
                 engine.line_clear(|indices| ());
                 hold_lock = false;
                 lock_down = false;
+                is_soft_drop = false;
             }
             if dirty {
                 draw(&mut canvas, &mut font, &engine);
@@ -216,6 +248,8 @@ fn draw(canvas: &mut Canvas<Window>, font: &mut Font, engine: &Engine) {
     // the square into which we draw and the margin which can be either on the left/right or top/bottom (because the window is resizable)
     let ui_square1 = SubRect::absolute(viewport, (1.0, 1.0), None);
 
+    let matrix_container = ui_square1.sub_rect((0.5, 1.0), None); // half of the width and full height, center alignment by default
+
     let matrix1 = ui_square1
         .sub_rect((0.5, 1.0), None) // half of the width and full height, center alignment by default
         .sub_rect((7.0 / 8.0, 7.0 / 8.0), None); // 7/8ths of the width and 7/8ths of the height, center by default
@@ -242,6 +276,9 @@ fn draw(canvas: &mut Canvas<Window>, font: &mut Font, engine: &Engine) {
     let score1 = ui_square1
         .sub_rect((0.25, 11.0 / 16.0), Some((Align::Near, Align::Far)))
         .sub_rect((7.0 / 8.0, 8.0 / 11.0), Some((Align::Center, Align::Near)));
+
+    canvas.set_draw_color(MATRIX_CONTAINER_COLOR);
+    canvas.fill_rect(Rect::from(matrix_container)).unwrap();
 
     canvas.set_draw_color(MATRIX_COLOR);
 
@@ -302,7 +339,7 @@ fn draw(canvas: &mut Canvas<Window>, font: &mut Font, engine: &Engine) {
     hold_cell_draw_ctx.draw_matrix();
 
     // up next text
-    let up_next_text = up_next1.sub_rect((1.0, 0.13), Some((Align::Center, Align::Near)));
+    let up_next_text = up_next1.sub_rect((0.5, 0.2), Some((Align::Center, Align::Near)));
 
     let mut text_draw_ctx: TextDrawContext = TextDrawContext {
         canvas,
@@ -313,13 +350,63 @@ fn draw(canvas: &mut Canvas<Window>, font: &mut Font, engine: &Engine) {
     text_draw_ctx.draw_text();
 
     // hold text
-    let hold_text = hold1.sub_rect((1.0, 0.18), Some((Align::Center, Align::Near)));
+    let hold_text = hold1.sub_rect((0.5, 0.25), Some((Align::Center, Align::Near)));
 
     let mut text_draw_ctx: TextDrawContext = TextDrawContext {
         canvas,
         font,
         text: "HOLD",
         rect: hold_text,
+    };
+    text_draw_ctx.draw_text();
+
+    let score_top = score1.sub_rect((1.0, 0.5), Some((Align::Center, Align::Near)));
+    let score_bottom = score1.sub_rect((1.0, 0.5), Some((Align::Center, Align::Far)));
+
+    // level text
+    let level_text = score_top.sub_rect((0.5, 0.25), Some((Align::Center, Align::Near)));
+
+    let mut text_draw_ctx: TextDrawContext = TextDrawContext {
+        canvas,
+        font,
+        text: "LEVEL",
+        rect: level_text,
+    };
+    text_draw_ctx.draw_text();
+
+    // level text
+    let level_text = score_top.sub_rect((0.8, 0.85), Some((Align::Center, Align::Far)));
+
+    let level: u8 = engine.level;
+
+    let mut text_draw_ctx: TextDrawContext = TextDrawContext {
+        canvas,
+        font,
+        text: &format!("  {level}  "),
+        rect: level_text,
+    };
+    text_draw_ctx.draw_text();
+
+    // lines text
+    let lines_text = score_bottom.sub_rect((0.5, 0.25), Some((Align::Center, Align::Near)));
+
+    let mut text_draw_ctx: TextDrawContext = TextDrawContext {
+        canvas,
+        font,
+        text: "LINES",
+        rect: lines_text,
+    };
+    text_draw_ctx.draw_text();
+
+    // lines text
+    let lines_text = score_bottom.sub_rect((0.8, 0.85), Some((Align::Center, Align::Far)));
+
+    let lines_reached = engine.lines_reached;
+    let mut text_draw_ctx: TextDrawContext = TextDrawContext {
+        canvas,
+        font,
+        text: &format!("  {lines_reached}  "),
+        rect: lines_text,
     };
     text_draw_ctx.draw_text();
 

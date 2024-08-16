@@ -35,14 +35,14 @@ impl TextDrawContext<'_, '_> {
 
         let TextureQuery { width, height, .. } = texture.query();
 
-        let up_next_text1 = SubRect::absolute(
+        let container = SubRect::absolute(
             Rect::from(self.rect),
-            ((width / 100) as f32, (height / 100) as f32),
+            ((width / 512) as f32, (height / 512) as f32),
             None,
         );
 
         self.canvas
-            .copy(&texture, None, Some(Rect::from(up_next_text1)))
+            .copy(&texture, None, Some(Rect::from(container)))
             .expect("Failed to copy to canvas");
     }
 }

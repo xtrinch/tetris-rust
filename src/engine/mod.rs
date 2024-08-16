@@ -36,7 +36,8 @@ pub struct Engine {
     hold: Option<PieceKind>,
     rng: ThreadRng,        // random number generator instance
     cursor: Option<Piece>, // current active piece (the one falling down), optional
-    level: u8,
+    pub level: u8,         // fixed goal System requires 10 lines each level through level 15
+    pub lines_reached: u32,
 }
 
 impl Engine {
@@ -48,6 +49,8 @@ impl Engine {
 
     pub const REMAINING_NEXT_MATRIX_WIDTH: usize = 4;
     pub const REMAINING_NEXT_MATRIX_HEIGHT: usize = 6 * 4; // 6 of the 7 items in next vector; TODO: from constant
+
+    pub const LINES_PER_LEVEL: u32 = 10;
 
     pub fn new() -> Self {
         let mut rng = thread_rng();
@@ -74,6 +77,7 @@ impl Engine {
             cursor: None,
             hold: None,
             level: 1,
+            lines_reached: 0,
         }
     }
 
@@ -349,10 +353,13 @@ impl Engine {
     }
 
     // how long the tetrimino should drop for a certain level
-    pub fn drop_time(&self) -> Duration {
+    pub fn drop_time(&self, is_soft_drop: bool) -> Duration {
         // equation from the docs: (0.8 - ((level - 1) * 0.007))^(level-1)
         let level_index = self.level + 1;
-        let seconds_per_line = (0.8 - ((level_index) as f32 * 0.007)).powi(level_index as i32);
+        let mut seconds_per_line = (0.8 - ((level_index) as f32 * 0.007)).powi(level_index as i32);
+        if is_soft_drop {
+            seconds_per_line /= 20.0;
+        }
         Duration::from_secs_f32(seconds_per_line)
     }
 
@@ -365,6 +372,13 @@ impl Engine {
         animation(lines.as_slice());
 
         self.matrix.clear_lines(lines.as_slice());
+
+        self.lines_reached += lines.len() as u32;
+
+        if self.lines_reached >= Self::LINES_PER_LEVEL {
+            self.level += 1;
+            self.lines_reached = 0;
+        }
     }
 }
 
