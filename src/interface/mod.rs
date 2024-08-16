@@ -23,7 +23,7 @@ mod sub_rect;
 mod text_draw;
 
 pub struct Interface {
-    engine: Engine,
+    pub engine: Engine,
 }
 
 const INIT_SIZE: Vector2<u32> = Vector2::new(1024, 1024);
@@ -53,7 +53,11 @@ impl Interface {
     //     );
     // }
 
-    pub fn run(mut engine: Engine) -> Result<(), String> {
+    pub fn new(mut engine: Engine) -> Self {
+        Self { engine }
+    }
+
+    pub fn run(&mut self) -> Result<(), String> {
         let sdl = sdl2::init().expect("Failed to initialize sdl2");
 
         let event_subsystem = sdl.event().expect("Failed to acquire event subsystem");
@@ -61,8 +65,6 @@ impl Interface {
         event_subsystem
             .register_custom_event::<LockdownTick>()
             .unwrap();
-
-        let timer_subsystem = sdl.timer().expect("Failed to acquire timer subsystem");
 
         let mut canvas = {
             // evaluation block
@@ -113,26 +115,10 @@ impl Interface {
         let mut is_soft_drop = false;
         let mut locking_down = false; // TODO: perhaps best to have a "state" enum instead of relying on this
 
-        // let mut test2 = Arc::new(Mutex::new(Rc::new(RefCell::new(Vec::<i32>::new()))));
-        // let test1 = Arc::new(Mutex::new(event_subsystem));
-        // let znjci = test1.clone();
-        // let mut test1 = Rc::new(RefCell::new(Vec::<i32>::new()));
-
         let clone1 = event_subsystem.clone();
         let static_event_subsystem: &'static _ = Box::leak(Box::new(clone1));
 
-        engine.create_top_cursor(None);
-
-        // let mut timer_tick: Canceller = CancellableTimer::after(
-        //     engine.drop_time(false),
-        //     (move |_abc| {
-        //         // let counter = Arc::clone(&test1);
-        //         // &mut *test1.borrow_mut();
-        //         // &test1.lock();
-        //         static_event_subsystem.push_custom_event(Tick).unwrap();
-        //     }),
-        // )
-        // .unwrap();
+        self.engine.create_top_cursor(None);
 
         event_subsystem.push_custom_event(Tick).unwrap();
 
@@ -149,15 +135,6 @@ impl Interface {
                         if locking_down {
                             continue;
                         }
-                        // timer_tick =
-                        // CancellableTimer::after(engine.drop_time(is_soft_drop), move |err| {
-                        //     if err.is_err() {
-                        //         return;
-                        //     }
-                        //     // event_subsystem.push_custom_event(Tick).unwrap();
-                        //     test.push(1 as i32);
-                        // })
-                        // .unwrap();
 
                         // let t = znjci.clone()
                         if timer_tick.is_some() {
@@ -165,13 +142,8 @@ impl Interface {
                         }
                         timer_tick = Some(
                             CancellableTimer::after(
-                                engine.drop_time(is_soft_drop),
+                                self.engine.drop_time(is_soft_drop),
                                 (move |_abc| {
-                                    // let counter = Arc::clone(&test1);
-                                    // &mut *test1.borrow_mut();
-                                    // &test1.lock();
-
-                                    println!("TIMER TICK");
                                     static_event_subsystem.push_custom_event(Tick).unwrap();
                                 }),
                             )
@@ -183,9 +155,9 @@ impl Interface {
                         };
 
                         // if we have a cursor to tick down, tick it down :)
-                        if engine.ticked_down_cursor().is_some() {
-                            engine.try_tick_down();
-                            let has_hit_bottom = engine.cursor_has_hit_bottom();
+                        if self.engine.ticked_down_cursor().is_some() {
+                            self.engine.try_tick_down();
+                            let has_hit_bottom = self.engine.cursor_has_hit_bottom();
 
                             if has_hit_bottom {
                                 locking_down = true;
@@ -214,21 +186,16 @@ impl Interface {
                     Event::User { .. } if event.as_user_event_type::<LockdownTick>().is_some() => {
                         println!("Found lockdown tick event");
                         // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
-                        engine.place_cursor();
-                        engine.create_top_cursor(None);
+                        self.engine.place_cursor();
+                        self.engine.create_top_cursor(None);
 
                         dirty = true;
                         cursor_locked_down = true;
 
                         timer_tick = Some(
                             CancellableTimer::after(
-                                engine.drop_time(is_soft_drop),
+                                self.engine.drop_time(is_soft_drop),
                                 (move |_abc| {
-                                    // let counter = Arc::clone(&test1);
-                                    // &mut *test1.borrow_mut();
-                                    // &test1.lock();
-
-                                    println!("TIMER TICK");
                                     static_event_subsystem.push_custom_event(Tick).unwrap();
                                 }),
                             )
@@ -238,7 +205,8 @@ impl Interface {
                     Event::KeyUp {
                         keycode: Some(key), ..
                     } => {
-                        if let Ok(input) = Input::try_from(key, engine.next_cursor_rotation()) {
+                        if let Ok(input) = Input::try_from(key, self.engine.next_cursor_rotation())
+                        {
                             match input {
                                 Input::SoftDrop => {
                                     println!("Soft drop tick up");
@@ -251,7 +219,8 @@ impl Interface {
                     Event::KeyDown {
                         keycode: Some(key), ..
                     } => {
-                        if let Ok(input) = Input::try_from(key, engine.next_cursor_rotation()) {
+                        if let Ok(input) = Input::try_from(key, self.engine.next_cursor_rotation())
+                        {
                             // TODO: flush and readd events if we're in lockdown phase?
 
                             match input {
@@ -275,11 +244,11 @@ impl Interface {
                                         );
                                     }
 
-                                    drop(engine.move_cursor(kind))
+                                    drop(self.engine.move_cursor(kind))
                                 }
                                 Input::HardDrop => {
-                                    engine.hard_drop(); // hard drop
-                                    engine.create_top_cursor(None);
+                                    self.engine.hard_drop(); // hard drop
+                                    self.engine.create_top_cursor(None);
                                     cursor_locked_down = true
                                 }
                                 Input::SoftDrop => {
@@ -293,7 +262,7 @@ impl Interface {
                                         }
                                         timer_tick = Some(
                                             CancellableTimer::after(
-                                                engine.drop_time(is_soft_drop),
+                                                self.engine.drop_time(is_soft_drop),
                                                 |err| {
                                                     if err.is_err() {
                                                         return;
@@ -309,14 +278,14 @@ impl Interface {
                                     }
                                 }
                                 Input::Rotation(kind) => {
-                                    engine.rotate_and_adjust_cursor(kind);
+                                    self.engine.rotate_and_adjust_cursor(kind);
                                 }
                                 Input::Pause => {
                                     paused = !paused;
                                 }
                                 Input::Hold => {
                                     if !hold_lock {
-                                        engine.try_hold();
+                                        self.engine.try_hold();
                                     }
                                     hold_lock = true;
                                 }
@@ -330,14 +299,14 @@ impl Interface {
 
             // scan the board, see what lines need to be cleared
             if cursor_locked_down {
-                engine.line_clear(|indices| ());
+                self.engine.line_clear(|indices| ());
                 hold_lock = false;
                 cursor_locked_down = false;
                 is_soft_drop = false;
                 locking_down = false;
             }
             if dirty {
-                draw(&mut canvas, &mut font, &engine);
+                draw(&mut canvas, &mut font, &self.engine);
             }
             dirty = false;
         }

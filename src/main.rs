@@ -17,5 +17,6 @@ fn main() {
 
     let engine = Engine::new();
 
-    Interface::run(engine);
+    let mut interface = Interface::new(engine);
+    interface.run();
 }
