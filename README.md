@@ -1,5 +1,7 @@
 # Tetris written in Rust
 
+Fully playable desktop tetris game/engine written in Rust.
+
 Engine concepts taken from https://www.youtube.com/playlist?list=PLBNbqulT6FWw9C39_WIT_dcCIj1AdxiAy playlist. 
 
 - `rustup install nightly`
