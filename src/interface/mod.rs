@@ -34,7 +34,6 @@ pub struct Interface {
     pub engine: Engine,
     pub sdl: Sdl,
     pub canvas: Canvas<Window>,
-    pub events: EventPump,
     pub ttf_context: Sdl2TtfContext,
     pub static_event_subsystem: &'static EventSubsystem,
 }
@@ -72,7 +71,6 @@ impl Interface {
                 .build()
                 .expect("Failed to get render canvas")
         };
-        let events = sdl.event_pump().expect("Failed to get event pump");
 
         let ttf_context = sdl2::ttf::init()
             .map_err(|e| e.to_string())
@@ -86,7 +84,6 @@ impl Interface {
             engine,
             sdl,
             canvas,
-            events,
             ttf_context,
             static_event_subsystem,
         }
@@ -125,7 +122,7 @@ impl Interface {
         self.static_event_subsystem.push_custom_event(Tick).unwrap();
 
         loop {
-            for event in self.events.poll_iter() {
+            for event in self.sdl.event_pump().unwrap().poll_iter() {
                 // match dbg!(event) {
                 match event {
                     // log any events with dbg
@@ -138,16 +135,7 @@ impl Interface {
                             continue;
                         }
 
-                        let s = self.static_event_subsystem;
-                        timer_tick = Some(
-                            CancellableTimer::after(
-                                self.engine.drop_time(is_soft_drop),
-                                (move |_abc| {
-                                    s.push_custom_event(Tick).unwrap();
-                                }),
-                            )
-                            .unwrap(),
-                        );
+                        timer_tick = self.tick_timer(is_soft_drop);
 
                         if paused {
                             break;
@@ -162,17 +150,7 @@ impl Interface {
                                 locking_down = true;
 
                                 // add event after 0.5s!
-                                timer_lockdown = Some(
-                                    CancellableTimer::after(Duration::from_millis(500), |err| {
-                                        if err.is_err() {
-                                            return;
-                                        }
-                                        self.static_event_subsystem
-                                            .push_custom_event(LockdownTick)
-                                            .unwrap();
-                                    })
-                                    .unwrap(),
-                                );
+                                timer_lockdown = self.lockdown_timer();
                             }
                         }
 
@@ -189,16 +167,7 @@ impl Interface {
                         dirty = true;
                         cursor_locked_down = true;
 
-                        let s = self.static_event_subsystem;
-                        timer_tick = Some(
-                            CancellableTimer::after(
-                                self.engine.drop_time(is_soft_drop),
-                                (move |_abc| {
-                                    s.push_custom_event(Tick).unwrap();
-                                }),
-                            )
-                            .unwrap(),
-                        );
+                        timer_tick = self.tick_timer(is_soft_drop);
                     }
                     Event::KeyUp {
                         keycode: Some(key), ..
@@ -224,20 +193,7 @@ impl Interface {
                                     // TODO: to func
                                     if locking_down & timer_lockdown.is_some() {
                                         timer_lockdown.as_ref().unwrap().cancel();
-                                        timer_lockdown = Some(
-                                            CancellableTimer::after(
-                                                Duration::from_millis(500),
-                                                |err| {
-                                                    if err.is_err() {
-                                                        return;
-                                                    }
-                                                    self.static_event_subsystem
-                                                        .push_custom_event(LockdownTick)
-                                                        .unwrap();
-                                                },
-                                            )
-                                            .unwrap(),
-                                        );
+                                        timer_lockdown = self.lockdown_timer();
                                     }
 
                                     drop(self.engine.move_cursor(kind))
@@ -251,26 +207,11 @@ impl Interface {
                                     println!("Soft drop tick");
                                     if !is_soft_drop && !locking_down {
                                         is_soft_drop = true;
-                                        // TODO: to func?
 
                                         if timer_tick.is_some() {
                                             timer_tick.as_ref().unwrap().cancel();
                                         }
-                                        timer_tick = Some(
-                                            CancellableTimer::after(
-                                                self.engine.drop_time(is_soft_drop),
-                                                |err| {
-                                                    if err.is_err() {
-                                                        return;
-                                                    }
-                                                    println!("SOFT DROP TICK");
-                                                    self.static_event_subsystem
-                                                        .push_custom_event(Tick)
-                                                        .unwrap();
-                                                },
-                                            )
-                                            .unwrap(),
-                                        );
+                                        timer_tick = self.tick_timer(is_soft_drop);
                                     }
                                 }
                                 Input::Rotation(kind) => {
@@ -308,18 +249,38 @@ impl Interface {
         }
     }
 
-    // fn timer<T>(&mut self, event: Tick LockdownTick, time: Duration) -> Option<Canceller> {
-    //     let s = self.static_event_subsystem;
-    //     Some(
-    //         CancellableTimer::after(
-    //             time,
-    //             (move |_abc| {
-    //                 s.push_custom_event(event).unwrap();
-    //             }),
-    //         )
-    //         .unwrap(),
-    //     )
-    // }
+    fn tick_timer(&mut self, is_soft_drop: bool) -> Option<Canceller> {
+        // TODO: to state is soft drop
+        let s = self.static_event_subsystem;
+        Some(
+            CancellableTimer::after(
+                self.engine.drop_time(is_soft_drop),
+                (move |err| {
+                    if err.is_err() {
+                        return;
+                    }
+                    s.push_custom_event(Tick).unwrap();
+                }),
+            )
+            .unwrap(),
+        )
+    }
+
+    fn lockdown_timer(&mut self) -> Option<Canceller> {
+        let s = self.static_event_subsystem;
+        Some(
+            CancellableTimer::after(
+                Duration::from_millis(500),
+                (move |err| {
+                    if err.is_err() {
+                        return;
+                    }
+                    s.push_custom_event(LockdownTick).unwrap();
+                }),
+            )
+            .unwrap(),
+        )
+    }
 
     fn draw(&mut self) {
         // Load the font
