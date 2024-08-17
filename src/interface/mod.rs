@@ -36,22 +36,11 @@ pub struct Interface {
     pub canvas: Canvas<Window>,
     pub ttf_context: Sdl2TtfContext,
     pub static_event_subsystem: &'static EventSubsystem,
+    pub timer_lockdown: Option<Canceller>,
+    pub timer_tick: Option<Canceller>,
 }
 
 impl Interface {
-    // fn flush_and_readd_events() {
-    //     // flush and readd events
-    //     event_subsystem.flush_event(EventType::User);
-    //     timer = timer_subsystem.add_timer(
-    //         engine.drop_time().as_millis() as _,
-    //         Box::new(|| {
-    //             println!("Tick event timer triggered");
-    //             event_subsystem.push_custom_event(Tick).unwrap();
-    //             0
-    //         }),
-    //     );
-    // }
-
     pub fn new(engine: Engine) -> Self {
         let sdl: Sdl = sdl2::init().expect("Failed to initialize sdl2");
         let video = sdl.video().expect("Failed to acquire display");
@@ -86,14 +75,12 @@ impl Interface {
             canvas,
             ttf_context,
             static_event_subsystem,
+            timer_lockdown: None,
+            timer_tick: None,
         }
     }
 
     pub fn run(&mut self) -> Result<(), String> {
-        // let static_event_subsystem: &'static _ = Box::leak(Box::new(
-        //     self.sdl.event().expect("Failed to acquire event subsystem"),
-        // ));
-
         /*
         A tetrimino that is Hard dropped Locks down immediately. However, if a tetrimino
         naturally falls or Soft drops onto a Surface, it is given 0.5 seconds on a Lock
@@ -102,8 +89,6 @@ impl Interface {
 
         // whether we should redraw or not
         let mut dirty: bool = true;
-        let mut timer_lockdown: Option<Canceller> = None;
-        let mut timer_tick: Option<Canceller> = None;
         let mut cursor_locked_down: bool = false;
         let mut paused = false;
         let mut hold_lock: bool = false;
@@ -135,7 +120,7 @@ impl Interface {
                             continue;
                         }
 
-                        timer_tick = self.tick_timer(is_soft_drop);
+                        self.set_tick_timer(is_soft_drop);
 
                         if paused {
                             break;
@@ -150,7 +135,7 @@ impl Interface {
                                 locking_down = true;
 
                                 // add event after 0.5s!
-                                timer_lockdown = self.lockdown_timer();
+                                self.set_lockdown_timer();
                             }
                         }
 
@@ -167,7 +152,7 @@ impl Interface {
                         dirty = true;
                         cursor_locked_down = true;
 
-                        timer_tick = self.tick_timer(is_soft_drop);
+                        self.set_tick_timer(is_soft_drop);
                     }
                     Event::KeyUp {
                         keycode: Some(key), ..
@@ -191,12 +176,12 @@ impl Interface {
                             match input {
                                 Input::Move(kind) => {
                                     // TODO: to func
-                                    if locking_down & timer_lockdown.is_some() {
-                                        timer_lockdown.as_ref().unwrap().cancel();
-                                        timer_lockdown = self.lockdown_timer();
+                                    if locking_down {
+                                        self.cancel_set_lockdown_timer();
+                                        self.set_lockdown_timer();
                                     }
 
-                                    drop(self.engine.move_cursor(kind))
+                                    self.engine.move_cursor(kind);
                                 }
                                 Input::HardDrop => {
                                     self.engine.hard_drop(); // hard drop
@@ -208,10 +193,8 @@ impl Interface {
                                     if !is_soft_drop && !locking_down {
                                         is_soft_drop = true;
 
-                                        if timer_tick.is_some() {
-                                            timer_tick.as_ref().unwrap().cancel();
-                                        }
-                                        timer_tick = self.tick_timer(is_soft_drop);
+                                        self.cancel_set_tick_timer();
+                                        self.set_tick_timer(is_soft_drop);
                                     }
                                 }
                                 Input::Rotation(kind) => {
@@ -249,10 +232,22 @@ impl Interface {
         }
     }
 
-    fn tick_timer(&mut self, is_soft_drop: bool) -> Option<Canceller> {
+    fn cancel_set_tick_timer(&mut self) {
+        if self.timer_tick.is_some() {
+            self.timer_tick.as_ref().unwrap().cancel();
+        }
+    }
+
+    fn cancel_set_lockdown_timer(&mut self) {
+        if self.timer_lockdown.is_some() {
+            self.timer_lockdown.as_ref().unwrap().cancel();
+        }
+    }
+
+    fn set_tick_timer(&mut self, is_soft_drop: bool) {
         // TODO: to state is soft drop
         let s = self.static_event_subsystem;
-        Some(
+        self.timer_tick = Some(
             CancellableTimer::after(
                 self.engine.drop_time(is_soft_drop),
                 (move |err| {
@@ -266,9 +261,9 @@ impl Interface {
         )
     }
 
-    fn lockdown_timer(&mut self) -> Option<Canceller> {
+    fn set_lockdown_timer(&mut self) {
         let s = self.static_event_subsystem;
-        Some(
+        self.timer_lockdown = Some(
             CancellableTimer::after(
                 Duration::from_millis(500),
                 (move |err| {
