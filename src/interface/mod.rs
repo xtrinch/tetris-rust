@@ -5,7 +5,8 @@ use cgmath::Vector2;
 use input::Input;
 use sdl2::ttf::Sdl2TtfContext;
 use sdl2::{event::Event, pixels::Color, rect::Rect, render::Canvas, video::Window};
-use sdl2::{EventPump, EventSubsystem, Sdl};
+use sdl2::{EventSubsystem, Sdl};
+use state::State;
 use std::path::Path;
 use std::time::Duration;
 use sub_rect::{Align, SubRect};
@@ -14,6 +15,7 @@ use text_draw::TextDrawContext;
 mod cell_draw;
 mod input;
 mod render_traits;
+mod state;
 mod sub_rect;
 mod text_draw;
 
@@ -87,23 +89,10 @@ impl Interface {
         down timer before it actually Locks down.
         */
 
-        #[derive(Clone, Copy, PartialEq, Debug)]
-        enum State {
-            Paused,
-            SoftDropping,
-            LockingDown,
-            LockedDown,
-            TickingDown,
-        }
         let mut state = State::TickingDown;
 
         // whether we should redraw or not
         let mut dirty: bool = true;
-        // let mut cursor_locked_down: bool = false;
-        // let mut paused = false;
-        // let mut hold_lock: bool = false;
-        // let mut is_soft_drop = false;
-        // let mut locking_down = false; // TODO: perhaps best to have a "state" enum instead of relying on this
 
         self.static_event_subsystem
             .register_custom_event::<Tick>()
@@ -126,9 +115,6 @@ impl Interface {
                     }
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
                         println!("Timer ticky picky?{:?}", state);
-                        if state == State::LockingDown {
-                            continue;
-                        }
 
                         self.set_tick_timer(state == State::SoftDropping);
 
@@ -138,10 +124,12 @@ impl Interface {
 
                         // if we have a cursor to tick down, tick it down :)
                         if self.engine.ticked_down_cursor().is_some() {
+                            println!("Found a cursor");
                             self.engine.try_tick_down();
                             let has_hit_bottom = self.engine.cursor_has_hit_bottom();
 
                             if has_hit_bottom {
+                                println!("Will lock down");
                                 state = State::LockingDown;
 
                                 // add event after 0.5s!
@@ -187,9 +175,8 @@ impl Interface {
                         {
                             match input {
                                 Input::Move(kind) => {
-                                    // TODO: to func
+                                    // restart lockdown timer
                                     if state == State::LockingDown {
-                                        self.cancel_set_lockdown_timer();
                                         self.set_lockdown_timer();
                                     }
 
@@ -204,12 +191,16 @@ impl Interface {
                                     if state != State::SoftDropping && state != State::LockingDown {
                                         state = State::SoftDropping;
 
-                                        self.cancel_set_tick_timer();
                                         self.set_tick_timer(state == State::SoftDropping);
                                     }
                                 }
                                 Input::Rotation(kind) => {
                                     self.engine.rotate_and_adjust_cursor(kind);
+
+                                    // restart lockdown timer
+                                    if state == State::LockingDown {
+                                        self.set_lockdown_timer();
+                                    }
                                 }
                                 Input::Pause => {
                                     if (state == State::Paused) {
@@ -254,6 +245,8 @@ impl Interface {
     }
 
     fn set_tick_timer(&mut self, is_soft_drop: bool) {
+        self.cancel_set_tick_timer();
+
         // TODO: to state is soft drop
         let s = self.static_event_subsystem;
         self.timer_tick = Some(
@@ -271,6 +264,8 @@ impl Interface {
     }
 
     fn set_lockdown_timer(&mut self) {
+        self.cancel_set_lockdown_timer();
+
         let s = self.static_event_subsystem;
         self.timer_lockdown = Some(
             CancellableTimer::after(
@@ -289,7 +284,7 @@ impl Interface {
     fn draw(&mut self) {
         // Load the font
         let path: &Path = Path::new("assets/NewAmsterdam-Regular.ttf");
-        let mut font = self
+        let font = self
             .ttf_context
             .load_font(path, 512)
             .expect("Failed to load font");
