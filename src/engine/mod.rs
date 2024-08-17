@@ -95,31 +95,35 @@ impl Engine {
         self.bag.shuffle(&mut self.rng)
     }
 
-    // place the cursor into the matrix onto the position it's currently at
-    pub fn place_cursor(&mut self) {
+    // place the cursor into the matrix onto the position it's currently at;
+    // if that's not possible, it's game over
+    pub fn place_cursor(&mut self) -> bool {
         let cursor = self.cursor.unwrap();
 
-        // validate that the piece does not overlap with any other pieces
-        debug_assert!(
-            self.matrix.is_placeable(&cursor),
-            "Tried to place cursor in an unplaceable location: {:?}",
-            cursor
-        );
+        // // validate that the piece does not overlap with any other pieces
+        // debug_assert!(
+        //     self.matrix.is_placeable(&cursor),
+        //     "Tried to place cursor in an unplaceable location: {:?}",
+        //     cursor
+        // );
 
-        // if !self.matrix.is_placeable(&cursor) {
-        //     return;
-        // }
+        if !self.matrix.is_placeable(&cursor) {
+            return false;
+        }
 
         self.matrix.place_piece(cursor);
+        return true;
     }
 
-    // place the cursor into the matrix onto the position it's currently at
-    fn try_place_cursor(&mut self) {
+    // place the cursor into the matrix onto the position it's currently at; if it returns false, it's game over
+    pub fn try_place_cursor(&mut self) -> bool {
         if let Some(cursor) = self.cursor {
-            self.place_cursor();
+            return self.place_cursor();
         } else {
             println!("Tried placing a nonexistant cursor")
         }
+
+        return true;
     }
 
     // returns Ok(()), Err(()) of unit, represented in memory same as a bool
@@ -295,9 +299,6 @@ impl Engine {
         while let Some(new) = self.ticked_down_cursor() {
             self.cursor = Some(new);
         }
-
-        // since we could press keyboard multiple times during one tick cycle, we need to not panic if there's no cursor
-        self.try_place_cursor();
     }
 
     pub fn try_hold(&mut self) -> Option<bool> {
@@ -401,6 +402,14 @@ impl Engine {
             self.level += 1;
             self.lines_reached = 0;
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.cursor = None;
+        self.matrix.clear();
+        self.level = 1;
+        self.score = 0;
+        self.lines_reached = 0;
     }
 }
 

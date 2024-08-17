@@ -40,6 +40,7 @@ pub struct Interface {
     pub static_event_subsystem: &'static EventSubsystem,
     pub timer_lockdown: Option<Canceller>,
     pub timer_tick: Option<Canceller>,
+    pub state: State,
 }
 
 impl Interface {
@@ -79,6 +80,7 @@ impl Interface {
             static_event_subsystem,
             timer_lockdown: None,
             timer_tick: None,
+            state: State::TickingDown,
         }
     }
 
@@ -88,8 +90,6 @@ impl Interface {
         naturally falls or Soft drops onto a Surface, it is given 0.5 seconds on a Lock
         down timer before it actually Locks down.
         */
-
-        let mut state = State::TickingDown;
 
         // whether we should redraw or not
         let mut dirty: bool = true;
@@ -114,11 +114,11 @@ impl Interface {
                         return Ok(());
                     }
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
-                        println!("Timer ticky picky?{:?}", state);
+                        println!("Timer ticky picky?{:?}", self.state);
 
-                        self.set_tick_timer(state == State::SoftDropping);
+                        self.set_tick_timer(self.state == State::SoftDropping);
 
-                        if state == State::Paused {
+                        if self.state == State::Paused {
                             continue;
                         };
 
@@ -130,7 +130,7 @@ impl Interface {
 
                             if has_hit_bottom {
                                 println!("Will lock down");
-                                state = State::LockingDown;
+                                self.state = State::LockingDown;
 
                                 // add event after 0.5s!
                                 self.set_lockdown_timer();
@@ -140,18 +140,23 @@ impl Interface {
                         dirty = true;
                     }
                     Event::User { .. } if event.as_user_event_type::<LockdownTick>().is_some() => {
-                        println!("Lockdown ick event? {:?}", state);
-                        if state != State::LockingDown {
+                        println!("Lockdown ick event? {:?}", self.state);
+                        if self.state != State::LockingDown {
                             continue;
                         }
                         // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
-                        self.engine.place_cursor();
+                        let ok = self.engine.place_cursor();
+                        if !ok {
+                            self.state = State::GameOver;
+                            continue;
+                        }
+
                         self.engine.create_top_cursor(None);
 
                         dirty = true;
-                        state = State::LockedDown;
+                        self.state = State::LockedDown;
 
-                        self.set_tick_timer(state == State::SoftDropping);
+                        self.set_tick_timer(self.state == State::SoftDropping);
                     }
                     Event::KeyUp {
                         keycode: Some(key), ..
@@ -160,8 +165,8 @@ impl Interface {
                         {
                             match input {
                                 Input::SoftDrop => {
-                                    if (state == State::SoftDropping) {
-                                        state = State::TickingDown;
+                                    if (self.state == State::SoftDropping) {
+                                        self.state = State::TickingDown;
                                     }
                                 }
                                 _ => {}
@@ -176,41 +181,84 @@ impl Interface {
                             match input {
                                 Input::Move(kind) => {
                                     // restart lockdown timer
-                                    if state == State::LockingDown {
+                                    if self.state == State::LockingDown {
                                         self.set_lockdown_timer();
                                     }
 
                                     self.engine.move_cursor(kind);
                                 }
                                 Input::HardDrop => {
+                                    if self.state == State::Paused || self.state == State::GameOver
+                                    {
+                                        continue;
+                                    }
+
                                     self.engine.hard_drop(); // hard drop
+                                    let ok = self.engine.try_place_cursor(); // since we could press keyboard multiple times during one tick cycle, we need to not panic if there's no cursor
+                                    if !ok {
+                                        self.state = State::GameOver;
+                                        continue;
+                                    }
+
                                     self.engine.create_top_cursor(None);
-                                    state = State::LockedDown;
+                                    self.state = State::LockedDown;
                                 }
                                 Input::SoftDrop => {
-                                    if state != State::SoftDropping && state != State::LockingDown {
-                                        state = State::SoftDropping;
+                                    if self.state == State::Paused || self.state == State::GameOver
+                                    {
+                                        continue;
+                                    }
 
-                                        self.set_tick_timer(state == State::SoftDropping);
+                                    if self.state != State::SoftDropping
+                                        && self.state != State::LockingDown
+                                    {
+                                        self.state = State::SoftDropping;
+
+                                        self.set_tick_timer(self.state == State::SoftDropping);
                                     }
                                 }
                                 Input::Rotation(kind) => {
+                                    if self.state == State::Paused || self.state == State::GameOver
+                                    {
+                                        continue;
+                                    }
+
                                     self.engine.rotate_and_adjust_cursor(kind);
 
                                     // restart lockdown timer
-                                    if state == State::LockingDown {
+                                    if self.state == State::LockingDown {
                                         self.set_lockdown_timer();
                                     }
                                 }
                                 Input::Pause => {
-                                    if (state == State::Paused) {
-                                        state = State::TickingDown;
+                                    if self.state == State::GameOver {
+                                        continue;
+                                    }
+
+                                    if (self.state == State::Paused) {
+                                        self.state = State::TickingDown;
                                     } else {
-                                        state = State::Paused;
+                                        self.state = State::Paused;
                                     }
                                 }
                                 Input::Hold => {
+                                    if self.state == State::Paused || self.state == State::GameOver
+                                    {
+                                        continue;
+                                    }
+
                                     self.engine.try_hold();
+                                }
+                                Input::Continue => {
+                                    if self.state != State::GameOver {
+                                        continue;
+                                    }
+
+                                    println!("COntinue?");
+                                    self.state = State::TickingDown;
+                                    self.engine.reset();
+                                    self.engine.create_top_cursor(None);
+                                    self.set_tick_timer(self.state == State::SoftDropping);
                                 }
                             }
                             dirty = true
@@ -221,9 +269,9 @@ impl Interface {
             }
 
             // scan the board, see what lines need to be cleared
-            if state == State::LockedDown {
-                self.engine.line_clear(|indices| ());
-                state = State::TickingDown;
+            if self.state == State::LockedDown {
+                self.engine.line_clear(|_| ());
+                self.state = State::TickingDown;
             }
             if dirty {
                 self.draw();
@@ -234,13 +282,13 @@ impl Interface {
 
     fn cancel_set_tick_timer(&mut self) {
         if self.timer_tick.is_some() {
-            self.timer_tick.as_ref().unwrap().cancel();
+            let _ = self.timer_tick.as_ref().unwrap().cancel();
         }
     }
 
     fn cancel_set_lockdown_timer(&mut self) {
         if self.timer_lockdown.is_some() {
-            self.timer_lockdown.as_ref().unwrap().cancel();
+            let _ = self.timer_lockdown.as_ref().unwrap().cancel();
         }
     }
 
@@ -482,6 +530,20 @@ impl Interface {
             rect: lines_text,
         };
         text_draw_ctx.draw_text();
+
+        if self.state == State::GameOver {
+            // game over text
+            let game_over_text =
+                matrix_container.sub_rect((0.8, 0.1), Some((Align::Center, Align::Center)));
+
+            let mut text_draw_ctx: TextDrawContext = TextDrawContext {
+                canvas: &mut self.canvas,
+                font: &font,
+                text: "GAME OVER",
+                rect: game_over_text,
+            };
+            text_draw_ctx.draw_text();
+        }
 
         self.canvas.present();
     }

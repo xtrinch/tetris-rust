@@ -5,4 +5,5 @@ pub enum State {
     LockingDown,
     LockedDown,
     TickingDown,
+    GameOver,
 }
