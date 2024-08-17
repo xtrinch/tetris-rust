@@ -1,5 +1,6 @@
 # Tetris written in Rust
 
+Engine concepts taken from https://www.youtube.com/playlist?list=PLBNbqulT6FWw9C39_WIT_dcCIj1AdxiAy playlist. 
 
 - `rustup install nightly`
 - `brew install sdl2 sdl2_ttf`
