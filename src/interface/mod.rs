@@ -87,13 +87,23 @@ impl Interface {
         down timer before it actually Locks down.
         */
 
+        #[derive(Clone, Copy, PartialEq, Debug)]
+        enum State {
+            Paused,
+            SoftDropping,
+            LockingDown,
+            LockedDown,
+            TickingDown,
+        }
+        let mut state = State::TickingDown;
+
         // whether we should redraw or not
         let mut dirty: bool = true;
-        let mut cursor_locked_down: bool = false;
-        let mut paused = false;
-        let mut hold_lock: bool = false;
-        let mut is_soft_drop = false;
-        let mut locking_down = false; // TODO: perhaps best to have a "state" enum instead of relying on this
+        // let mut cursor_locked_down: bool = false;
+        // let mut paused = false;
+        // let mut hold_lock: bool = false;
+        // let mut is_soft_drop = false;
+        // let mut locking_down = false; // TODO: perhaps best to have a "state" enum instead of relying on this
 
         self.static_event_subsystem
             .register_custom_event::<Tick>()
@@ -115,15 +125,15 @@ impl Interface {
                         return Ok(());
                     }
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
-                        println!("Timer ticky picky?{}", is_soft_drop);
-                        if locking_down {
+                        println!("Timer ticky picky?{:?}", state);
+                        if state == State::LockingDown {
                             continue;
                         }
 
-                        self.set_tick_timer(is_soft_drop);
+                        self.set_tick_timer(state == State::SoftDropping);
 
-                        if paused {
-                            break;
+                        if state == State::Paused {
+                            continue;
                         };
 
                         // if we have a cursor to tick down, tick it down :)
@@ -132,7 +142,7 @@ impl Interface {
                             let has_hit_bottom = self.engine.cursor_has_hit_bottom();
 
                             if has_hit_bottom {
-                                locking_down = true;
+                                state = State::LockingDown;
 
                                 // add event after 0.5s!
                                 self.set_lockdown_timer();
@@ -142,7 +152,8 @@ impl Interface {
                         dirty = true;
                     }
                     Event::User { .. } if event.as_user_event_type::<LockdownTick>().is_some() => {
-                        if (!locking_down) {
+                        println!("Lockdown ick event? {:?}", state);
+                        if state != State::LockingDown {
                             continue;
                         }
                         // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
@@ -150,9 +161,9 @@ impl Interface {
                         self.engine.create_top_cursor(None);
 
                         dirty = true;
-                        cursor_locked_down = true;
+                        state = State::LockedDown;
 
-                        self.set_tick_timer(is_soft_drop);
+                        self.set_tick_timer(state == State::SoftDropping);
                     }
                     Event::KeyUp {
                         keycode: Some(key), ..
@@ -161,8 +172,9 @@ impl Interface {
                         {
                             match input {
                                 Input::SoftDrop => {
-                                    println!("Soft drop tick up");
-                                    is_soft_drop = false;
+                                    if (state == State::SoftDropping) {
+                                        state = State::TickingDown;
+                                    }
                                 }
                                 _ => {}
                             }
@@ -176,7 +188,7 @@ impl Interface {
                             match input {
                                 Input::Move(kind) => {
                                     // TODO: to func
-                                    if locking_down {
+                                    if state == State::LockingDown {
                                         self.cancel_set_lockdown_timer();
                                         self.set_lockdown_timer();
                                     }
@@ -186,28 +198,28 @@ impl Interface {
                                 Input::HardDrop => {
                                     self.engine.hard_drop(); // hard drop
                                     self.engine.create_top_cursor(None);
-                                    cursor_locked_down = true
+                                    state = State::LockedDown;
                                 }
                                 Input::SoftDrop => {
-                                    println!("Soft drop tick");
-                                    if !is_soft_drop && !locking_down {
-                                        is_soft_drop = true;
+                                    if state != State::SoftDropping && state != State::LockingDown {
+                                        state = State::SoftDropping;
 
                                         self.cancel_set_tick_timer();
-                                        self.set_tick_timer(is_soft_drop);
+                                        self.set_tick_timer(state == State::SoftDropping);
                                     }
                                 }
                                 Input::Rotation(kind) => {
                                     self.engine.rotate_and_adjust_cursor(kind);
                                 }
                                 Input::Pause => {
-                                    paused = !paused;
+                                    if (state == State::Paused) {
+                                        state = State::TickingDown;
+                                    } else {
+                                        state = State::Paused;
+                                    }
                                 }
                                 Input::Hold => {
-                                    if !hold_lock {
-                                        self.engine.try_hold();
-                                    }
-                                    hold_lock = true;
+                                    self.engine.try_hold();
                                 }
                             }
                             dirty = true
@@ -218,12 +230,9 @@ impl Interface {
             }
 
             // scan the board, see what lines need to be cleared
-            if cursor_locked_down {
+            if state == State::LockedDown {
                 self.engine.line_clear(|indices| ());
-                hold_lock = false;
-                cursor_locked_down = false;
-                is_soft_drop = false;
-                locking_down = false;
+                state = State::TickingDown;
             }
             if dirty {
                 self.draw();
