@@ -1,3 +1,4 @@
+# Tetris written in Rust
 `rustup install nightly`
 
 `brew install sdl2 sdl2_ttf`

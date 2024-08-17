@@ -41,6 +41,7 @@ pub struct Interface {
     pub timer_lockdown: Option<Canceller>,
     pub timer_tick: Option<Canceller>,
     pub state: State,
+    pub lockdown_timer_count: i32,
 }
 
 impl Interface {
@@ -81,6 +82,7 @@ impl Interface {
             timer_lockdown: None,
             timer_tick: None,
             state: State::TickingDown,
+            lockdown_timer_count: 0,
         }
     }
 
@@ -107,29 +109,34 @@ impl Interface {
 
         loop {
             for event in self.sdl.event_pump().unwrap().poll_iter() {
-                // match dbg!(event) {
                 match event {
-                    // log any events with dbg
                     Event::Quit { .. } => {
                         return Ok(());
                     }
                     Event::User { .. } if event.as_user_event_type::<Tick>().is_some() => {
                         println!("Timer ticky picky?{:?}", self.state);
 
-                        self.set_tick_timer(self.state == State::SoftDropping);
+                        self.set_tick_timer();
 
                         if self.state == State::Paused {
                             continue;
                         };
 
+                        // check if we've hit bottom without ticking down!
+                        let has_hit_bottom = self.engine.cursor_has_hit_bottom();
+                        if has_hit_bottom && self.state == State::TickingDown {
+                            println!("has hit bottom game over");
+                            self.state = State::GameOver;
+                        }
+
                         // if we have a cursor to tick down, tick it down :)
                         if self.engine.ticked_down_cursor().is_some() {
-                            println!("Found a cursor");
                             self.engine.try_tick_down();
                             let has_hit_bottom = self.engine.cursor_has_hit_bottom();
 
+                            println!("cursor, {:?}", self.engine.cursor_info());
                             if has_hit_bottom {
-                                println!("Will lock down");
+                                println!("has hit bottom");
                                 self.state = State::LockingDown;
 
                                 // add event after 0.5s!
@@ -140,23 +147,32 @@ impl Interface {
                         dirty = true;
                     }
                     Event::User { .. } if event.as_user_event_type::<LockdownTick>().is_some() => {
-                        println!("Lockdown ick event? {:?}", self.state);
+                        println!("Lockdown tick event? {:?}", self.state);
                         if self.state != State::LockingDown {
                             continue;
                         }
+                        // if we've moved the tetrimino in lockdown so it can tick down more than once, we'll need to check that
+                        if self.engine.ticked_down_cursor().is_some() {
+                            self.set_lockdown_timer();
+                            continue;
+                        }
+
                         // the Lock down timer resets to 0.5 seconds if the player simply moves or rotates the tetrimino.
                         let ok = self.engine.place_cursor();
                         if !ok {
+                            println!("CURSOR COULD NOT BE PLACED");
+                            // if cursor could not be placed
                             self.state = State::GameOver;
                             continue;
                         }
 
                         self.engine.create_top_cursor(None);
+                        println!("creating top corsurp {:?}", self.engine.cursor_info());
 
                         dirty = true;
                         self.state = State::LockedDown;
 
-                        self.set_tick_timer(self.state == State::SoftDropping);
+                        self.set_tick_timer();
                     }
                     Event::KeyUp {
                         keycode: Some(key), ..
@@ -196,6 +212,7 @@ impl Interface {
                                     self.engine.hard_drop(); // hard drop
                                     let ok = self.engine.try_place_cursor(); // since we could press keyboard multiple times during one tick cycle, we need to not panic if there's no cursor
                                     if !ok {
+                                        println!("CUrsor cuold NTO BE PLACED1");
                                         self.state = State::GameOver;
                                         continue;
                                     }
@@ -213,8 +230,7 @@ impl Interface {
                                         && self.state != State::LockingDown
                                     {
                                         self.state = State::SoftDropping;
-
-                                        self.set_tick_timer(self.state == State::SoftDropping);
+                                        self.set_tick_timer();
                                     }
                                 }
                                 Input::Rotation(kind) => {
@@ -242,6 +258,7 @@ impl Interface {
                                     }
                                 }
                                 Input::Hold => {
+                                    // put a tetrimino on hold
                                     if self.state == State::Paused || self.state == State::GameOver
                                     {
                                         continue;
@@ -250,15 +267,15 @@ impl Interface {
                                     self.engine.try_hold();
                                 }
                                 Input::Continue => {
+                                    // start new game
                                     if self.state != State::GameOver {
                                         continue;
                                     }
 
-                                    println!("COntinue?");
                                     self.state = State::TickingDown;
                                     self.engine.reset();
                                     self.engine.create_top_cursor(None);
-                                    self.set_tick_timer(self.state == State::SoftDropping);
+                                    self.set_tick_timer();
                                 }
                             }
                             dirty = true
@@ -272,6 +289,7 @@ impl Interface {
             if self.state == State::LockedDown {
                 self.engine.line_clear(|_| ());
                 self.state = State::TickingDown;
+                self.lockdown_timer_count = 0;
             }
             if dirty {
                 self.draw();
@@ -292,10 +310,10 @@ impl Interface {
         }
     }
 
-    fn set_tick_timer(&mut self, is_soft_drop: bool) {
+    fn set_tick_timer(&mut self) {
+        let is_soft_drop = self.state == State::SoftDropping;
         self.cancel_set_tick_timer();
 
-        // TODO: to state is soft drop
         let s = self.static_event_subsystem;
         self.timer_tick = Some(
             CancellableTimer::after(
@@ -312,6 +330,12 @@ impl Interface {
     }
 
     fn set_lockdown_timer(&mut self) {
+        println!("lck:${}", self.lockdown_timer_count);
+        if self.lockdown_timer_count > 15 {
+            return;
+        }
+
+        self.lockdown_timer_count += 1;
         self.cancel_set_lockdown_timer();
 
         let s = self.static_event_subsystem;

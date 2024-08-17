@@ -49,7 +49,7 @@ impl Engine {
     pub const SINGLE_TETRIMINO_MATRIX_HEIGHT: usize = 4;
 
     pub const REMAINING_NEXT_MATRIX_WIDTH: usize = 4;
-    pub const REMAINING_NEXT_MATRIX_HEIGHT: usize = 6 * 4; // 6 of the 7 items in next vector; TODO: from constant
+    pub const REMAINING_NEXT_MATRIX_HEIGHT: usize = 6 * 4; // 6 of the 7 items in next vector;
 
     pub const LINES_PER_LEVEL: u32 = 10;
 
@@ -100,13 +100,6 @@ impl Engine {
     pub fn place_cursor(&mut self) -> bool {
         let cursor = self.cursor.unwrap();
 
-        // // validate that the piece does not overlap with any other pieces
-        // debug_assert!(
-        //     self.matrix.is_placeable(&cursor),
-        //     "Tried to place cursor in an unplaceable location: {:?}",
-        //     cursor
-        // );
-
         if !self.matrix.is_placeable(&cursor) {
             return false;
         }
@@ -127,20 +120,19 @@ impl Engine {
     }
 
     // returns Ok(()), Err(()) of unit, represented in memory same as a bool
-    pub fn move_cursor(&mut self, kind: MoveKind) -> Result<(), ()> {
+    pub fn move_cursor(&mut self, kind: MoveKind) {
         let Some(cursor) = self.cursor.as_mut() else {
-            return Ok(()); // because it's OK to move a cursor that isn't there, it would just do nothing
+            return; // because it's OK to move a cursor that isn't there, it would just do nothing
         };
 
         let new = cursor.moved_by(kind.offset());
 
         // check if it is not within moveable bounds (or above)
         if self.matrix.is_clipping(&new) {
-            return Err(());
+            return;
         }
 
         self.cursor = Some(new);
-        Ok(())
     }
 
     pub fn rotate_cursor(&mut self, kind: Rotation) -> () {
@@ -188,11 +180,11 @@ impl Engine {
     pub fn create_top_cursor(&mut self, force_kind: Option<PieceKind>) {
         let kind: PieceKind;
         if force_kind.is_some() {
+            // force the kind (e.g. from hold) and skip the next & queue tetrimino manipulations
             kind = force_kind.unwrap();
         } else {
             kind = self.next.remove(0);
 
-            // TODO: prettify
             // add a new one since we removed one
             let new_tetrimino: PieceKind = rand::random(); // we can do this because we implemented the distribution trait for this enum!
             self.next.push(new_tetrimino);
@@ -217,7 +209,6 @@ impl Engine {
                     piece.position = (0, ((inside_index) * 4) as isize).into();
 
                     for coord in self.matrix.piece_cells(&piece).unwrap() {
-                        // TODO: some constants
                         // add to y so we get a top-to-bottom queue
                         self.queue_matrix[(coord.x, coord.y).into()] = Some(piece.kind.color());
                     }
@@ -310,7 +301,7 @@ impl Engine {
 
             let old_hold = self.hold;
             self.hold = Some(cursor.kind);
-            cursor.position = (0, 0).into(); // TODO: make sure this doesn't do phantom draws of cursor at 0,0
+            cursor.position = (0, 0).into();
             self.hold_matrix.place_piece(cursor);
 
             self.cursor = None;
@@ -320,58 +311,6 @@ impl Engine {
         }
 
         return Some(true);
-    }
-
-    // get an iterator for the cells of the matrix
-    pub fn cells(&self) -> CellIter<'_, { Self::MATRIX_WIDTH }, { Self::MATRIX_HEIGHT }> {
-        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
-        CellIter {
-            position: Coordinate::origin(),
-            cells: self.matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
-        }
-    }
-
-    // get an iterator for the cells of the matrix
-    pub fn cells_up_next(
-        &self,
-    ) -> CellIter<
-        '_,
-        { Self::SINGLE_TETRIMINO_MATRIX_WIDTH },
-        { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT },
-    > {
-        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
-        CellIter {
-            position: Coordinate::origin(),
-            cells: self.up_next_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
-        }
-    }
-
-    // get an iterator for the cells of the matrix
-    pub fn cells_hold(
-        &self,
-    ) -> CellIter<
-        '_,
-        { Self::SINGLE_TETRIMINO_MATRIX_WIDTH },
-        { Self::SINGLE_TETRIMINO_MATRIX_HEIGHT },
-    > {
-        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
-        CellIter {
-            position: Coordinate::origin(),
-            cells: self.hold_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
-        }
-    }
-
-    // TODO: cleanup, do we even need this methd
-    // get an iterator for the cells of the matrix
-    pub fn cells_remaining_next(
-        &self,
-    ) -> CellIter<'_, { Self::REMAINING_NEXT_MATRIX_WIDTH }, { Self::REMAINING_NEXT_MATRIX_HEIGHT }>
-    {
-        // '_ means a deduced lifetime, will associate matrix's lifetime with the cell iter lifetime
-        CellIter {
-            position: Coordinate::origin(),
-            cells: self.queue_matrix.matrix.iter(), // iter over first element of tuple which is our matrix array
-        }
     }
 
     // how long the tetrimino should drop for a certain level
