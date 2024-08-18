@@ -66,14 +66,12 @@ where
             .div_element_wise(Self::CELL_COUNT);
 
         // our matrix goes bottom left +, their draw matrix goes from top left +, so we need to do some translation
-        let cell_rect = Rect::new(
+        Rect::new(
             self.origin.x + this.x as i32,
             self.origin.y - this.y as i32 - 1, // we subtract so we go up instead of down since origin is top left for the draw matrix (we also add one since the rect is drawn in the opposite direction); -1 is because we do border overlap adjustments
             next.x - this.x + 1, // next x is "to the right", -1 to make the borders overlap
             this.y - next.y + 1, // prev_y is "higher", -1 to make the borders overlap
-        );
-
-        cell_rect
+        )
     }
 
     pub fn try_draw_cell(&mut self, coord: Coordinate, cell: Option<TetriminoColor>) {

@@ -1,4 +1,4 @@
-use sdl2::{pixels::Color as SdlColor, Sdl};
+use sdl2::pixels::Color as SdlColor;
 
 use crate::engine::color::TetriminoColor;
 

@@ -1,4 +1,4 @@
-use super::{color::TetriminoColor, piece::Piece, Coordinate, Offset};
+use super::{color::TetriminoColor, piece::Piece, Coordinate};
 use crate::engine::geometry::GridIncrement;
 use cgmath::EuclideanSpace;
 use std::{
@@ -73,7 +73,7 @@ where
         // place all of the squares of the piece into the matrix
         cells
             .into_iter()
-            .all(|coord| self.on_matrix(coord) && self[coord] == None)
+            .all(|coord| self.on_matrix(coord) && self[coord].is_none())
     }
 
     // max 4 at a time because the largest piece spans only 4 lines
@@ -204,9 +204,7 @@ impl<'matrix, const WIDTH: usize, const HEIGHT: usize> Iterator
     type Item = (Coordinate, Option<TetriminoColor>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(&cell) = self.cells.next() else {
-            return None;
-        };
+        let &cell = self.cells.next()?;
 
         let coord = self.position;
 

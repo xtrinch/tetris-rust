@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use cgmath::{EuclideanSpace, Point2, Vector2};
 use color::TetriminoColor;
-use matrix::{CellIter, Matrix};
+use matrix::Matrix;
 use move_kind::MoveKind;
 use piece::Piece;
 use piece_kind::PieceKind;
@@ -74,7 +74,7 @@ impl Engine {
             >::blank(),
             bag: Vec::new(),
             next: up_next,
-            rng: rng,
+            rng,
             cursor: None,
             hold: None,
             level: 1,
@@ -105,7 +105,7 @@ impl Engine {
         }
 
         self.matrix.place_piece(cursor);
-        return true;
+        true
     }
 
     // place the cursor into the matrix onto the position it's currently at; if it returns false, it's game over
@@ -116,7 +116,7 @@ impl Engine {
             println!("Tried placing a nonexistant cursor")
         }
 
-        return true;
+        true
     }
 
     // returns Ok(()), Err(()) of unit, represented in memory same as a bool
@@ -135,7 +135,7 @@ impl Engine {
         self.cursor = Some(new);
     }
 
-    pub fn rotate_cursor(&mut self, kind: Rotation) -> () {
+    pub fn rotate_cursor(&mut self, kind: Rotation) {
         let Some(cursor) = self.cursor.as_mut() else {
             return; // because it's OK to move a cursor that isn't there, it would just do nothing
         };
@@ -157,7 +157,7 @@ impl Engine {
         // otherwise perform the rotation
         self.cursor = Some(cursor_clone);
 
-        return Some(());
+        Some(())
     }
 
     pub fn cursor_info(
@@ -258,7 +258,7 @@ impl Engine {
     // two ways this can fail -> hit the bottom (cells() will return None) or hit another piece
     pub fn try_tick_down(&mut self) {
         // extract cursor from the optional
-        let cursor = self
+        let _cursor = self
             .cursor
             .as_ref()
             .expect("Tried to tick an absent cursor");
@@ -276,9 +276,7 @@ impl Engine {
 
     // get the new cursor if it was ticked down
     pub fn ticked_down_cursor(&self) -> Option<Piece> {
-        let Some(cursor) = self.cursor else {
-            return None;
-        };
+        let cursor = self.cursor?;
         let new = cursor.moved_by(Offset::new(0, -1));
 
         (!self.matrix.is_clipping(&new)).then_some(new)
@@ -310,7 +308,7 @@ impl Engine {
             self.create_top_cursor(old_hold);
         }
 
-        return Some(true);
+        Some(true)
     }
 
     // how long the tetrimino should drop for a certain level

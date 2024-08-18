@@ -1,12 +1,7 @@
-use crate::interface::render_traits::ScreenColor;
-use cgmath::ElementWise;
-use cgmath::EuclideanSpace;
-use cgmath::{Point2, Vector2};
 use sdl2::render::TextureQuery;
 use sdl2::ttf::Font;
 use sdl2::{pixels::Color, rect::Rect, render::Canvas, video::Window};
 
-use super::sub_rect::Align;
 use super::sub_rect::SubRect;
 
 // we need a lifetime because we have a mutable reference

@@ -1,10 +1,6 @@
-use cgmath::Zero;
-
 use super::piece_kind::PieceKind;
 use super::piece_rotation::Rotation;
-use super::{Coordinate, Offset};
-use super::{Engine, Matrix};
-use cgmath::EuclideanSpace;
+use super::Offset;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 

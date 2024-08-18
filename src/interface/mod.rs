@@ -181,7 +181,7 @@ impl Interface {
                         {
                             match input {
                                 Input::SoftDrop => {
-                                    if (self.state == State::SoftDropping) {
+                                    if self.state == State::SoftDropping {
                                         self.state = State::TickingDown;
                                     }
                                 }
@@ -251,7 +251,7 @@ impl Interface {
                                         continue;
                                     }
 
-                                    if (self.state == State::Paused) {
+                                    if self.state == State::Paused {
                                         self.state = State::TickingDown;
                                     } else {
                                         self.state = State::Paused;
@@ -316,15 +316,12 @@ impl Interface {
 
         let s = self.static_event_subsystem;
         self.timer_tick = Some(
-            CancellableTimer::after(
-                self.engine.drop_time(is_soft_drop),
-                (move |err| {
-                    if err.is_err() {
-                        return;
-                    }
-                    s.push_custom_event(Tick).unwrap();
-                }),
-            )
+            CancellableTimer::after(self.engine.drop_time(is_soft_drop), move |err| {
+                if err.is_err() {
+                    return;
+                }
+                s.push_custom_event(Tick).unwrap();
+            })
             .unwrap(),
         )
     }
@@ -340,15 +337,12 @@ impl Interface {
 
         let s = self.static_event_subsystem;
         self.timer_lockdown = Some(
-            CancellableTimer::after(
-                Duration::from_millis(500),
-                (move |err| {
-                    if err.is_err() {
-                        return;
-                    }
-                    s.push_custom_event(LockdownTick).unwrap();
-                }),
-            )
+            CancellableTimer::after(Duration::from_millis(500), move |err| {
+                if err.is_err() {
+                    return;
+                }
+                s.push_custom_event(LockdownTick).unwrap();
+            })
             .unwrap(),
         )
     }
@@ -434,7 +428,7 @@ impl Interface {
             { Engine::MATRIX_HEIGHT },
         > = CellDrawContext {
             origin: matrix1.bottom_left(),
-            dims: Vector2::from(matrix1.size()),
+            dims: matrix1.size(),
             canvas: &mut self.canvas,
             matrix: &self.engine.matrix, // TODO: figure our how to pass the iter instead of the whole matrix
         };
@@ -452,7 +446,7 @@ impl Interface {
             { Engine::SINGLE_TETRIMINO_MATRIX_HEIGHT },
         > = CellDrawContext {
             origin: up_next1.bottom_left(),
-            dims: Vector2::from(up_next1.size()),
+            dims: up_next1.size(),
             canvas: &mut self.canvas,
             matrix: &self.engine.up_next_matrix,
         };
@@ -464,7 +458,7 @@ impl Interface {
             { Engine::REMAINING_NEXT_MATRIX_HEIGHT },
         > = CellDrawContext {
             origin: queue1.bottom_left(),
-            dims: Vector2::from(queue1.size()),
+            dims: queue1.size(),
             canvas: &mut self.canvas,
             matrix: &self.engine.queue_matrix,
         };
@@ -476,7 +470,7 @@ impl Interface {
             { Engine::SINGLE_TETRIMINO_MATRIX_HEIGHT },
         > = CellDrawContext {
             origin: hold1.bottom_left(),
-            dims: Vector2::from(hold1.size()),
+            dims: hold1.size(),
             canvas: &mut self.canvas,
             matrix: &self.engine.hold_matrix,
         };
